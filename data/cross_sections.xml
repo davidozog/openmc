@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <cross_sections>
   <directory>
-    /opt/mcnp/data
+    /home/ozog/usr/src/openmc-bare/data
   </directory>
   <filetype>
     binary
