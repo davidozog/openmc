@@ -116,6 +116,8 @@ module global
   !   2) track-length estimate of k-eff
   !   3) leakage fraction
 
+  real(8) :: tally_tracklength = 0
+  real(8) :: tally_collision   = 0
   type(TallyResult), target :: global_tallies(N_GLOBAL_TALLIES)
 
   ! Tally map structure

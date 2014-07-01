@@ -52,7 +52,7 @@ contains
 
       ! =======================================================================
       ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p)
+!$omp parallel do schedule(static) firstprivate(p) reduction(+:tally_tracklength,tally_collision)
       PARTICLE_LOOP: do i = 1, work
 
         ! Set unique particle ID
@@ -110,6 +110,15 @@ contains
 !===============================================================================
 
   subroutine finalize_batch()
+
+    ! Update global tallies with the omp private accumulation variables
+    global_tallies(K_TRACKLENGTH) % value = &
+         global_tallies(K_TRACKLENGTH) % value + tally_tracklength
+    global_tallies(K_COLLISION) % value   = &
+         global_tallies(K_COLLISION) % value + tally_collision
+    ! reset private tallies
+    tally_tracklength = 0
+    tally_collision = 0
 
     ! Collect and accumulate tallies
     call time_tallies % start()

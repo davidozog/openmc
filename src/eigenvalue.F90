@@ -72,7 +72,7 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p)
+!$omp parallel do schedule(static) firstprivate(p) reduction(+:tally_tracklength,tally_collision)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
@@ -165,6 +165,15 @@ contains
 !===============================================================================
 
   subroutine finalize_generation()
+
+    ! Update global tallies with the omp private accumulation variables
+    global_tallies(K_TRACKLENGTH) % value = &
+         global_tallies(K_TRACKLENGTH) % value + tally_tracklength
+    global_tallies(K_COLLISION) % value   = &
+         global_tallies(K_COLLISION) % value + tally_collision
+    ! reset private tallies
+    tally_tracklength = 0
+    tally_collision = 0
 
 #ifdef _OPENMP
     ! Join the fission bank from each thread into one global fission bank
