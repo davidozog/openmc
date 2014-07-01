@@ -171,6 +171,7 @@ contains
          global_tallies(K_TRACKLENGTH) % value + tally_tracklength
     global_tallies(K_COLLISION) % value   = &
          global_tallies(K_COLLISION) % value + tally_collision
+
     ! reset private tallies
     tally_tracklength = 0
     tally_collision = 0
@@ -214,6 +215,9 @@ contains
     if (.not. active_batches) then
       call reset_result(global_tallies)
       n_realizations = 0
+      ! reset private tallies
+      tally_tracklength = 0
+      tally_collision = 0
     end if
 
     ! Perform CMFD calculation if on
