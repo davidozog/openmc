@@ -72,7 +72,9 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p) reduction(+:tally_tracklength,tally_collision)
+!$omp parallel do schedule(dynamic) firstprivate(p) &
+!$omp reduction(+:tally_tracklength,tally_collision,&
+!$omp tally_leakage,tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
@@ -171,10 +173,15 @@ contains
          global_tallies(K_TRACKLENGTH) % value + tally_tracklength
     global_tallies(K_COLLISION) % value   = &
          global_tallies(K_COLLISION) % value + tally_collision
-
+    global_tallies(LEAKAGE) % value   = &
+         global_tallies(LEAKAGE) % value + tally_leakage
+    global_tallies(K_ABSORPTION) % value   = &
+         global_tallies(K_ABSORPTION) % value + tally_absorption
     ! reset private tallies
     tally_tracklength = 0
-    tally_collision = 0
+    tally_collision   = 0
+    tally_leakage     = 0
+    tally_absorption  = 0
 
 #ifdef _OPENMP
     ! Join the fission bank from each thread into one global fission bank

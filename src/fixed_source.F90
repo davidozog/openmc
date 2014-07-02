@@ -52,7 +52,9 @@ contains
 
       ! =======================================================================
       ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p) reduction(+:tally_tracklength,tally_collision)
+!$omp parallel do schedule(dynamic) firstprivate(p) &
+!$omp reduction(+:tally_tracklength,tally_collision,&
+!$omp tally_leakage,tally_absorption)
       PARTICLE_LOOP: do i = 1, work
 
         ! Set unique particle ID
@@ -116,9 +118,13 @@ contains
          global_tallies(K_TRACKLENGTH) % value + tally_tracklength
     global_tallies(K_COLLISION) % value   = &
          global_tallies(K_COLLISION) % value + tally_collision
+    global_tallies(LEAKAGE) % value   = &
+         global_tallies(LEAKAGE) % value + tally_leakage
     ! reset private tallies
     tally_tracklength = 0
-    tally_collision = 0
+    tally_collision   = 0
+    tally_leakage     = 0
+    tally_absorption  = 0
 
     ! Collect and accumulate tallies
     call time_tallies % start()

@@ -409,10 +409,7 @@ contains
 
       ! Score to global leakage tally
       if (tallies_on) then
-!$omp critical
-        global_tallies(LEAKAGE) % value = &
-           global_tallies(LEAKAGE) % value + p % wgt
-!$omp end critical
+        tally_leakage = tally_leakage + p % wgt
       end if
 
       ! Display message

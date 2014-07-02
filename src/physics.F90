@@ -254,22 +254,16 @@ contains
       p % last_wgt = p % wgt
 
       ! Score implicit absorption estimate of keff
-!$omp critical
-      global_tallies(K_ABSORPTION) % value = &
-           global_tallies(K_ABSORPTION) % value + p % absorb_wgt * &
+      tally_absorption = tally_absorption + p % absorb_wgt * &
            micro_xs(i_nuclide) % nu_fission / micro_xs(i_nuclide) % absorption
-!$omp end critical
 
     else
       ! See if disappearance reaction happens
       if (micro_xs(i_nuclide) % absorption > &
            prn() * micro_xs(i_nuclide) % total) then
         ! Score absorption estimate of keff
-!$omp critical
-        global_tallies(K_ABSORPTION) % value = &
-             global_tallies(K_ABSORPTION) % value + p % wgt * &
-             micro_xs(i_nuclide) % nu_fission / micro_xs(i_nuclide) % absorption
-!$omp end critical
+      tally_absorption = tally_absorption + p % absorb_wgt * &
+           micro_xs(i_nuclide) % nu_fission / micro_xs(i_nuclide) % absorption
 
         p % alive = .false.
         p % event = EVENT_ABSORB
