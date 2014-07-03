@@ -24,12 +24,14 @@ module eigenvalue
   use tracking,     only: transport
   use cross_section, only: calculate_bank_xs
   use mic,          only: mic_func
+  use omp_lib
 
   private
   public :: run_eigenvalue
 
   real(8) :: keff_generation ! Single-generation k on each processor
   real(8) :: k_sum(2) = ZERO ! used to reduce sum and sum_sq
+  type(BankedParticle), allocatable, target :: master_xs_bank(:)
 
 contains
 
@@ -42,6 +44,7 @@ contains
 
     type(Particle) :: p
     integer        :: i_work
+    integer :: alloc_err_xs  ! cross section allocation error code
 
     if (master) call header("K EIGENVALUE SIMULATION", level=1)
 
@@ -50,6 +53,30 @@ contains
 
     ! Turn on inactive timer
     call time_inactive % start()
+
+#ifdef _OPENMP
+    n_threads = omp_get_max_threads()
+
+!$omp parallel
+    thread_id = omp_get_thread_num()
+    if (thread_id == 0) then
+       ! For MIC, allocate a cross section lookup bank:
+       allocate(xs_bank(work), STAT=alloc_err_xs)
+    else
+       allocate(xs_bank(work/n_threads+1), STAT=alloc_err_xs)
+    end if
+!$omp end parallel
+
+    allocate(master_xs_bank(work), STAT=alloc_err_xs)
+
+    ! init
+    n_bank_xs = 0
+
+    allocate(master_xs_bank(work), STAT=alloc_err_xs)
+#else
+    allocate(fission_bank(3*work), STAT=alloc_err)
+    allocate(xs_bank(work), STAT=alloc_err_xs)
+#endif
 
     ! ==========================================================================
     ! LOOP OVER BATCHES
@@ -90,7 +117,7 @@ contains
 !$omp end parallel do
 
         call join_xs_bank_from_threads()
-        call calculate_bank_xs()
+        call calculate_bank_xs(master_xs_bank)
 !       call mic_func()
 
         ! Accumulate time for transport

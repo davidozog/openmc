@@ -54,8 +54,9 @@ contains
 ! CALCULATE_BANK_XS does the same thing as calculate_xs, but vectorized for MIC
 !===============================================================================
 
-  subroutine calculate_bank_xs()
+  subroutine calculate_bank_xs(master_xs_bank)
 
+    type(BankedParticle), intent(inout) :: master_xs_bank(:)
     integer :: i             ! loop index over nuclides
     integer :: i_nuclide     ! index into nuclides array
     integer :: i_sab         ! index into sab_tables array
@@ -79,10 +80,11 @@ contains
     print *, "n_grid:", n_grid
     print *, "total_xs is ", total_xs
     print *, "bank:", xs_bank
-!dir$ offload begin target(mic:0)
+
+!dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs))
 !$omp parallel do
     do pp = 1, total_xs
-      print *, "hi:", omp_get_thread_num(), pp
+      print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
       i = pp + 3.1
     end do
 !dir$ end offload 

@@ -230,9 +230,6 @@ module global
                              ! cross section lookup
 
   type(BankedParticle), allocatable, target :: xs_bank(:)
-#ifdef _OPENMP
-  type(BankedParticle), allocatable, target :: master_xs_bank(:)
-#endif
 
   ! ============================================================================
   ! TIMING VARIABLES

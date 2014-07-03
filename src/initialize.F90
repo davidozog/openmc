@@ -862,7 +862,6 @@ contains
   subroutine allocate_banks()
 
     integer :: alloc_err     ! allocation error code
-    integer :: alloc_err_xs  ! cross section allocation error code
 
     ! Allocate source bank
     allocate(source_bank(work), STAT=alloc_err)
@@ -887,30 +886,19 @@ contains
     if (thread_id == 0) then
        allocate(fission_bank(3*work))
        ! For MIC, allocate a cross section lookup bank:
-       allocate(xs_bank(work), STAT=alloc_err_xs)
     else
        allocate(fission_bank(3*work/n_threads))
-       allocate(xs_bank(work/n_threads+1), STAT=alloc_err_xs)
     end if
-
-    ! init
-    n_bank_xs = 0
 
 !$omp end parallel
     allocate(master_fission_bank(3*work), STAT=alloc_err)
-    allocate(master_xs_bank(work), STAT=alloc_err_xs)
 #else
     allocate(fission_bank(3*work), STAT=alloc_err)
-    allocate(xs_bank(work), STAT=alloc_err_xs)
 #endif
 
     ! Check for allocation errors 
     if (alloc_err /= 0) then
       message = "Failed to allocate fission bank."
-      call fatal_error()
-    end if
-    if (alloc_err_xs /= 0) then
-      message = "Failed to allocate cross section bank."
       call fatal_error()
     end if
 
