@@ -84,6 +84,20 @@ module particle_header
     procedure :: clear => clear_particle
   end type Particle
 
+!===============================================================================
+! PARTICLESTACK describes the state of a particle being transported through the
+! geometry
+!===============================================================================
+
+  type BankedParticle
+    ! Basic data
+    integer(8) :: id            ! Unique ID
+    integer    :: type          ! Particle type (n, p, e, etc)
+    integer    :: material      ! index for current material
+    real(8)    :: E             ! energy
+    integer    :: energy_index  ! unionized energy index
+  end type BankedParticle
+
 contains
 
 !===============================================================================

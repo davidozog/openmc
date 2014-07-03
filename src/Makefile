@@ -11,7 +11,7 @@ xml_lib = -Lxml/lib -lxml
 
 COMPILER = intel
 DEBUG    = yes
-PROFILE  = yes
+PROFILE  = no
 OPTIMIZE = no
 MPI      = no
 OPENMP   = yes
@@ -67,7 +67,7 @@ endif
 
 ifeq ($(COMPILER),intel)
   F90 = ifort
-  F90FLAGS := -fpp -std08 -assume byterecl -traceback
+  F90FLAGS := -fpp -std08 -assume byterecl -traceback -opt-report-phase=offload
   LDFLAGS =
 
   # Debugging

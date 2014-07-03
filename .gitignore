@@ -32,3 +32,5 @@ results_error.dat
 
 # HDF5 files
 *.h5
+
+benchmarks/

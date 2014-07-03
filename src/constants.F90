@@ -386,4 +386,9 @@ module constants
   ! constant for writing out no residual
   real(8), parameter :: CMFD_NORES = 99999.0_8
 
+  !=============================================================================
+  ! VECTORIZATION (MIC) CONSTANTS
+
+  integer, parameter :: MAX_STACK_LEN = 1048576
+
 end module constants

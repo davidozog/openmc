@@ -22,6 +22,8 @@ module eigenvalue
   use tally,        only: synchronize_tallies, setup_active_usertallies, &
                           reset_result
   use tracking,     only: transport
+  use cross_section, only: calculate_bank_xs
+  use mic,          only: mic_func
 
   private
   public :: run_eigenvalue
@@ -72,9 +74,9 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(dynamic) firstprivate(p) &
-!$omp reduction(+:tally_tracklength,tally_collision,&
-!$omp tally_leakage,tally_absorption)
+!$omp  parallel do schedule(static) firstprivate(p)    &
+!$omp& reduction(+:tally_tracklength,tally_collision, &
+!$omp& tally_leakage,tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
@@ -86,6 +88,10 @@ contains
 
         end do PARTICLE_LOOP
 !$omp end parallel do
+
+        call join_xs_bank_from_threads()
+        call calculate_bank_xs()
+!       call mic_func()
 
         ! Accumulate time for transport
         call time_transport % stop()
@@ -153,6 +159,7 @@ contains
 
     ! Reset number of fission bank sites
     n_bank = 0
+    n_bank_xs = 0
 
     ! Count source sites if using uniform fission source weighting
     if (ufs) call count_source_for_ufs()
@@ -224,7 +231,9 @@ contains
       n_realizations = 0
       ! reset private tallies
       tally_tracklength = 0
-      tally_collision = 0
+      tally_collision   = 0
+      tally_leakage     = 0
+      tally_absorption  = 0
     end if
 
     ! Perform CMFD calculation if on
@@ -854,11 +863,11 @@ contains
 
   subroutine join_bank_from_threads()
 
-    integer :: total ! total number of fission bank sites
-    integer :: i     ! loop index for threads
+    integer :: total_fission ! total number of fission bank sites
+    integer :: i             ! loop index for threads
 
     ! Initialize the total number of fission bank sites
-    total = 0
+    total_fission = 0
 
 !$omp parallel
 
@@ -866,8 +875,8 @@ contains
 !$omp do ordered schedule(static)
     do i = 1, n_threads
 !$omp ordered
-       master_fission_bank(total+1:total+n_bank) = fission_bank(1:n_bank)
-       total = total + n_bank
+      master_fission_bank(total_fission+1:total_fission+n_bank) = fission_bank(1:n_bank)
+      total_fission = total_fission + n_bank
 !$omp end ordered
     end do
 !$omp end do
@@ -877,15 +886,55 @@ contains
 
     ! Now copy the shared fission bank sites back to the master thread's copy.
     if (thread_id == 0) then
-       n_bank = total
-       fission_bank(1:n_bank) = master_fission_bank(1:n_bank)
+      n_bank = total_fission
+      fission_bank(1:n_bank) = master_fission_bank(1:n_bank)
     else
-       n_bank = 0
+      n_bank = 0
     end if
 
 !$omp end parallel
 
   end subroutine join_bank_from_threads
+
+!===============================================================================
+! JOIN_XS_BANK_FROM_THREADS
+!===============================================================================
+
+  subroutine join_xs_bank_from_threads()
+
+    integer :: total_xs      ! total number of cross section bank sites
+    integer :: i             ! loop index for threads
+
+    ! Initialize the total number of fission bank sites
+    total_xs = 0
+
+!$omp parallel
+
+    ! Copy thread fission bank sites to one shared copy
+!$omp do ordered schedule(static)
+    do i = 1, n_threads
+!$omp ordered
+      master_xs_bank(total_xs+1:total_xs+n_bank_xs) = xs_bank(1:n_bank_xs)
+      total_xs = total_xs + n_bank_xs
+!$omp end ordered
+    end do
+!$omp end do
+
+    ! Make sure all threads have made it to this point
+!$omp barrier
+
+    ! Now copy the shared fission bank sites back to the master thread's copy.
+    if (thread_id == 0) then
+      n_bank_xs = total_xs
+      xs_bank(1:n_bank_xs) = master_xs_bank(1:n_bank_xs)
+      print *, "xs:", xs_bank
+    else
+      n_bank_xs = 0
+    end if
+
+!$omp end parallel
+
+  end subroutine join_xs_bank_from_threads
 #endif
 
 end module eigenvalue

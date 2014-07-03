@@ -14,6 +14,7 @@ module global
   use source_header,    only: ExtSource
   use tally_header,     only: TallyObject, TallyMap, TallyResult
   use timer_header,     only: Timer
+  use particle_header,  only: BankedParticle
 
 #ifdef HDF5
   use hdf5_interface,  only: HID_T
@@ -219,6 +220,21 @@ module global
   logical :: reduce_tallies = .true.
 
   ! ============================================================================
+  ! VECTORIZED PROCESSING VARIABLES
+
+  ! These variables store particles for vector processing assistance.
+  ! See Brown and Martin "MONTE CARLO METHODS FOR RADIATION TRANSPORT ANALYSIS
+  ! ON VECTOR COMPUTERS" (1984) for details.
+
+  integer :: n_bank_xs = 0   ! Thread-private number of banked particles for 
+                             ! cross section lookup
+
+  type(BankedParticle), allocatable, target :: xs_bank(:)
+#ifdef _OPENMP
+  type(BankedParticle), allocatable, target :: master_xs_bank(:)
+#endif
+
+  ! ============================================================================
   ! TIMING VARIABLES
 
   type(Timer) :: time_total         ! timer for total run
@@ -379,7 +395,8 @@ module global
   logical :: output_tallies = .true.
 
 !$omp threadprivate(micro_xs, material_xs, fission_bank, n_bank, message, &
-!$omp&              trace, thread_id, current_work, matching_bins)
+!$omp&              trace, thread_id, current_work, matching_bins, n_bank_xs, &
+!$omp               xs_bank)
 
 contains
 
@@ -447,6 +464,7 @@ contains
     ! Deallocate fission and source bank and entropy
 !$omp parallel
     if (allocated(fission_bank)) deallocate(fission_bank)
+    if (allocated(xs_bank)) deallocate(xs_bank)
 !$omp end parallel
 #ifdef _OPENMP
     if (allocated(master_fission_bank)) deallocate(master_fission_bank)

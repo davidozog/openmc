@@ -1,6 +1,6 @@
 module tracking
 
-  use cross_section,   only: calculate_xs
+  use cross_section,   only: calculate_xs, bank_xs
   use error,           only: fatal_error, warning
   use geometry,        only: find_cell, distance_to_boundary, cross_surface, &
                              cross_lattice, check_cell_overlap
@@ -74,137 +74,139 @@ contains
       call initialize_particle_track()
     endif
 
-    do while (p % alive)
+    if (p % material /= p % last_material) call bank_xs(p)
 
-      ! Write particle track.
-      if (p % write_track) call write_particle_track(p)
+!   do while (p % alive)
 
-      if (check_overlaps) call check_cell_overlap(p)
+!     ! Write particle track.
+!     if (p % write_track) call write_particle_track(p)
 
-      ! Calculate microscopic and macroscopic cross sections -- note: if the
-      ! material is the same as the last material and the energy of the
-      ! particle hasn't changed, we don't need to lookup cross sections again.
+!     if (check_overlaps) call check_cell_overlap(p)
 
-      if (p % material /= p % last_material) call calculate_xs(p)
+!     ! Calculate microscopic and macroscopic cross sections -- note: if the
+!     ! material is the same as the last material and the energy of the
+!     ! particle hasn't changed, we don't need to lookup cross sections again.
 
-      ! Find the distance to the nearest boundary
-      call distance_to_boundary(p, d_boundary, surface_crossed, lattice_crossed)
+!     if (p % material /= p % last_material) call calculate_xs(p)
 
-      ! Sample a distance to collision
-      if (material_xs % total == ZERO) then
-        d_collision = INFINITY
-      else
-        d_collision = -log(prn()) / material_xs % total
-      end if
+!     ! Find the distance to the nearest boundary
+!     call distance_to_boundary(p, d_boundary, surface_crossed, lattice_crossed)
 
-      ! Select smaller of the two distances
-      distance = min(d_boundary, d_collision)
+!     ! Sample a distance to collision
+!     if (material_xs % total == ZERO) then
+!       d_collision = INFINITY
+!     else
+!       d_collision = -log(prn()) / material_xs % total
+!     end if
 
-      ! Advance particle
-      coord => p % coord0
-      do while (associated(coord))
-        coord % xyz = coord % xyz + distance * coord % uvw
-        coord => coord % next
-      end do
+!     ! Select smaller of the two distances
+!     distance = min(d_boundary, d_collision)
 
-      ! Score track-length tallies
-      if (active_tracklength_tallies % size() > 0) &
-           call score_tracklength_tally(p, distance)
+!     ! Advance particle
+!     coord => p % coord0
+!     do while (associated(coord))
+!       coord % xyz = coord % xyz + distance * coord % uvw
+!       coord => coord % next
+!     end do
 
-      ! Score track-length estimate of k-eff
-      tally_tracklength = tally_tracklength + p % wgt * &
-           distance * material_xs % nu_fission
+!     ! Score track-length tallies
+!     if (active_tracklength_tallies % size() > 0) &
+!          call score_tracklength_tally(p, distance)
 
-      if (d_collision > d_boundary) then
-        ! ====================================================================
-        ! PARTICLE CROSSES SURFACE
+!     ! Score track-length estimate of k-eff
+!     tally_tracklength = tally_tracklength + p % wgt * &
+!          distance * material_xs % nu_fission
 
-        last_cell = p % coord % cell
-        p % coord % cell = NONE
-        if (lattice_crossed /= NONE) then
-          ! Particle crosses lattice boundary
-          p % surface = NONE
-          call cross_lattice(p, lattice_crossed)
-          p % event = EVENT_LATTICE
-        else
-          ! Particle crosses surface
-          p % surface = surface_crossed
-          call cross_surface(p, last_cell)
-          p % event = EVENT_SURFACE
-        end if
-      else
-        ! ====================================================================
-        ! PARTICLE HAS COLLISION
+!     if (d_collision > d_boundary) then
+!       ! ====================================================================
+!       ! PARTICLE CROSSES SURFACE
 
-        ! Score collision estimate of keff
-        tally_collision = tally_collision + p % wgt * &
-             material_xs % nu_fission / material_xs % total
+!       last_cell = p % coord % cell
+!       p % coord % cell = NONE
+!       if (lattice_crossed /= NONE) then
+!         ! Particle crosses lattice boundary
+!         p % surface = NONE
+!         call cross_lattice(p, lattice_crossed)
+!         p % event = EVENT_LATTICE
+!       else
+!         ! Particle crosses surface
+!         p % surface = surface_crossed
+!         call cross_surface(p, last_cell)
+!         p % event = EVENT_SURFACE
+!       end if
+!     else
+!       ! ====================================================================
+!       ! PARTICLE HAS COLLISION
 
-        ! score surface current tallies -- this has to be done before the collision
-        ! since the direction of the particle will change and we need to use the
-        ! pre-collision direction to figure out what mesh surfaces were crossed
+!       ! Score collision estimate of keff
+!       tally_collision = tally_collision + p % wgt * &
+!            material_xs % nu_fission / material_xs % total
 
-        if (active_current_tallies % size() > 0) call score_surface_current(p)
+!       ! score surface current tallies -- this has to be done before the collision
+!       ! since the direction of the particle will change and we need to use the
+!       ! pre-collision direction to figure out what mesh surfaces were crossed
 
-        ! Clear surface component
-        p % surface = NONE
+!       if (active_current_tallies % size() > 0) call score_surface_current(p)
 
-        call collision(p)
+!       ! Clear surface component
+!       p % surface = NONE
 
-        ! Score collision estimator tallies -- this is done after a collision
-        ! has occurred rather than before because we need information on the
-        ! outgoing energy for any tallies with an outgoing energy filter
+!       call collision(p)
 
-        if (active_analog_tallies % size() > 0) call score_analog_tally(p)
+!       ! Score collision estimator tallies -- this is done after a collision
+!       ! has occurred rather than before because we need information on the
+!       ! outgoing energy for any tallies with an outgoing energy filter
 
-        ! Reset banked weight during collision
-        p % n_bank   = 0
-        p % wgt_bank = ZERO
+!       if (active_analog_tallies % size() > 0) call score_analog_tally(p)
 
-        ! Reset fission logical
-        p % fission = .false.
+!       ! Reset banked weight during collision
+!       p % n_bank   = 0
+!       p % wgt_bank = ZERO
 
-        ! Save coordinates for tallying purposes
-        p % last_xyz = p % coord0 % xyz
+!       ! Reset fission logical
+!       p % fission = .false.
 
-        ! Set last material to none since cross sections will need to be
-        ! re-evaluated
-        p % last_material = NONE
+!       ! Save coordinates for tallying purposes
+!       p % last_xyz = p % coord0 % xyz
 
-        ! Set all uvws to base level -- right now, after a collision, only the
-        ! base level uvws are changed
-        coord => p % coord0
-        do while(associated(coord % next))
-          if (coord % next % rotated) then
-            ! If next level is rotated, apply rotation matrix
-            coord % next % uvw = matmul(cells(coord % cell) % &
-                 rotation, coord % uvw)
-          else
-            ! Otherwise, copy this level's direction
-            coord % next % uvw = coord % uvw
-          end if
+!       ! Set last material to none since cross sections will need to be
+!       ! re-evaluated
+!       p % last_material = NONE
 
-          ! Advance coordinate level
-          coord => coord % next
-        end do
-      end if
+!       ! Set all uvws to base level -- right now, after a collision, only the
+!       ! base level uvws are changed
+!       coord => p % coord0
+!       do while(associated(coord % next))
+!         if (coord % next % rotated) then
+!           ! If next level is rotated, apply rotation matrix
+!           coord % next % uvw = matmul(cells(coord % cell) % &
+!                rotation, coord % uvw)
+!         else
+!           ! Otherwise, copy this level's direction
+!           coord % next % uvw = coord % uvw
+!         end if
 
-      ! If particle has too many events, display warning and kill it
-      n_event = n_event + 1
-      if (n_event == MAX_EVENTS) then
-        message = "Particle " // trim(to_str(p%id)) // " underwent maximum &
-             &number of events."
-        call warning()
-        p % alive = .false.
-      end if
+!         ! Advance coordinate level
+!         coord => coord % next
+!       end do
+!     end if
 
-    end do
+!     ! If particle has too many events, display warning and kill it
+!     n_event = n_event + 1
+!     if (n_event == MAX_EVENTS) then
+!       message = "Particle " // trim(to_str(p%id)) // " underwent maximum &
+!            &number of events."
+!       call warning()
+!       p % alive = .false.
+!     end if
 
-    ! Finish particle track output.
-    if (p % write_track) then
-      call write_particle_track(p)
-      call finalize_particle_track(p)
-    endif
+!   end do
+
+!   ! Finish particle track output.
+!   if (p % write_track) then
+!     call write_particle_track(p)
+!     call finalize_particle_track(p)
+!   endif
 
   end subroutine transport
 

@@ -9,6 +9,7 @@ module cross_section
   use particle_header, only: Particle
   use random_lcg,      only: prn
   use search,          only: binary_search
+  use omp_lib
 
   implicit none
   save
@@ -17,6 +18,165 @@ module cross_section
 !$omp threadprivate(union_grid_index)
 
 contains
+
+!===============================================================================
+! XS_BANKS places particle in a bank for vectorized cross section lookups later
+!===============================================================================
+
+  subroutine bank_xs(p)
+
+    type(Particle), intent(inout) :: p
+    integer :: current_bank_slot
+
+    current_bank_slot = n_bank_xs + 1
+    xs_bank(current_bank_slot) % id       = p % id
+    xs_bank(current_bank_slot) % type     = p % type
+    xs_bank(current_bank_slot) % material = p % material
+    xs_bank(current_bank_slot) % E        = p % E
+
+    ! increment number of bank sites
+    n_bank_xs = min(n_bank_xs + 1, work/n_threads+1)
+
+    if (xs_bank(current_bank_slot) % material == MATERIAL_VOID) then
+      xs_bank(current_bank_slot) % energy_index = -1
+      print *, "WARNING: NOT SURE IF THIS IS COOL..."
+    else if (grid_method == GRID_UNION) then
+      xs_bank(current_bank_slot) % energy_index = &
+              find_energy_index(xs_bank(current_bank_slot) % E)
+    else
+      message = "NON UNION MIC NOT IMPLEMENTED."
+      call fatal_error()
+    end if
+
+  end subroutine bank_xs
+
+!===============================================================================
+! CALCULATE_BANK_XS does the same thing as calculate_xs, but vectorized for MIC
+!===============================================================================
+
+  subroutine calculate_bank_xs()
+
+    integer :: i             ! loop index over nuclides
+    integer :: i_nuclide     ! index into nuclides array
+    integer :: i_sab         ! index into sab_tables array
+    integer :: j             ! index in mat % i_sab_nuclides
+    integer :: pp            ! particle index
+    integer :: total_xs      ! number of particles in bank
+    real(8) :: atom_density  ! atom density of a nuclide
+    logical :: check_sab     ! should we check for S(a,b) table?
+    type(Material), pointer, save :: mat => null() ! current material
+!$omp threadprivate(mat)
+
+    ! Set all material macroscopic cross sections to zero
+    material_xs % total      = ZERO
+    material_xs % elastic    = ZERO
+    material_xs % absorption = ZERO
+    material_xs % fission    = ZERO
+    material_xs % nu_fission = ZERO
+    material_xs % kappa_fission  = ZERO
+
+    total_xs = n_bank_xs
+    print *, "n_grid:", n_grid
+    print *, "total_xs is ", total_xs
+    print *, "bank:", xs_bank
+!dir$ offload begin target(mic:0)
+!$omp parallel do
+    do pp = 1, total_xs
+      print *, "hi:", omp_get_thread_num(), pp
+      i = pp + 3.1
+    end do
+!dir$ end offload 
+
+    do pp = 1, total_xs
+
+      print *, "here" 
+
+      ! Exit subroutine if material is void
+      !if (xs_bank(pp) % material == MATERIAL_VOID) return
+
+      mat => materials(xs_bank(pp) % material)
+
+      ! Find energy index on unionized grid
+      !if (grid_method == GRID_UNION) call find_energy_index(xs_bank(pp) % E)
+
+      ! Determine if this material has S(a,b) tables
+      check_sab = (mat % n_sab > 0)
+
+      ! Initialize position in i_sab_nuclides
+      j = 1
+
+      ! Add contribution from each nuclide in material
+      do i = 1, mat % n_nuclides
+        ! ======================================================================
+        ! CHECK FOR S(A,B) TABLE
+
+        i_sab = 0
+
+        ! Check if this nuclide matches one of the S(a,b) tables specified --
+        ! this relies on i_sab_nuclides being in sorted order
+        if (check_sab) then
+          if (i == mat % i_sab_nuclides(j)) then
+            ! Get index in sab_tables
+            i_sab = mat % i_sab_tables(j)
+
+            ! If particle energy is greater than highest energy for the
+            ! S(a,v) table, don't use the S(a,b) table
+            if (xs_bank(pp) % E > sab_tables(i_sab) % threshold_inelastic) i_sab = 0
+
+            ! Increment position in i_sab_nuclides
+            j = j + 1
+
+            ! Don't check for S(a,b) tables if there are no more left
+            if (j > mat % n_sab) check_sab = .false.
+          end if
+        end if
+
+        ! ======================================================================
+        ! CALCULATE MICROSCOPIC CROSS SECTION
+
+        ! Determine microscopic cross sections for this nuclide
+        i_nuclide = mat % nuclide(i)
+
+        ! Calculate microscopic cross section for this nuclide
+        if (xs_bank(pp) % E /= micro_xs(i_nuclide) % last_E) then
+          call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
+        else if (i_sab /= micro_xs(i_nuclide) % last_index_sab) then
+          call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
+        end if
+
+        ! ======================================================================
+        ! ADD TO MACROSCOPIC CROSS SECTION
+
+        ! Copy atom density of nuclide in material
+        atom_density = mat % atom_density(i)
+
+        ! Add contributions to material macroscopic total cross section
+        material_xs % total = material_xs % total + &
+             atom_density * micro_xs(i_nuclide) % total
+
+        ! Add contributions to material macroscopic scattering cross section
+        material_xs % elastic = material_xs % elastic + &
+             atom_density * micro_xs(i_nuclide) % elastic
+
+        ! Add contributions to material macroscopic absorption cross section
+        material_xs % absorption = material_xs % absorption + & 
+             atom_density * micro_xs(i_nuclide) % absorption
+
+        ! Add contributions to material macroscopic fission cross section
+        material_xs % fission = material_xs % fission + &
+             atom_density * micro_xs(i_nuclide) % fission
+
+        ! Add contributions to material macroscopic nu-fission cross section
+        material_xs % nu_fission = material_xs % nu_fission + &
+             atom_density * micro_xs(i_nuclide) % nu_fission
+             
+        ! Add contributions to material macroscopic energy release from fission
+        material_xs % kappa_fission = material_xs % kappa_fission + &
+             atom_density * micro_xs(i_nuclide) % kappa_fission
+      end do
+    end do
+
+  end subroutine calculate_bank_xs
 
 !===============================================================================
 ! CALCULATE_XS determines the macroscopic cross sections for the material the
@@ -50,7 +210,7 @@ contains
     mat => materials(p % material)
 
     ! Find energy index on unionized grid
-    if (grid_method == GRID_UNION) call find_energy_index(p % E)
+    if (grid_method == GRID_UNION) union_grid_index = find_energy_index(p % E)
 
     ! Determine if this material has S(a,b) tables
     check_sab = (mat % n_sab > 0)
@@ -462,20 +622,21 @@ contains
 ! energy
 !===============================================================================
 
-  subroutine find_energy_index(E)
+  function find_energy_index(E) result(e_index)
 
     real(8), intent(in) :: E ! energy of particle
+    integer :: e_index ! unionized energy index
 
     ! if particle's energy is outside of energy grid range, set to first or last
     ! index. Otherwise, do a binary search through the union energy grid.
     if (E < e_grid(1)) then
-      union_grid_index = 1
+      e_index = 1
     elseif (E > e_grid(n_grid)) then
-      union_grid_index = n_grid - 1
+      e_index = n_grid - 1
     else
-      union_grid_index = binary_search(e_grid, n_grid, E)
+      e_index = binary_search(e_grid, n_grid, E)
     end if
 
-  end subroutine find_energy_index
+  end function find_energy_index
 
 end module cross_section

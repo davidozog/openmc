@@ -105,6 +105,8 @@ eigenvalue.o: state_point.o
 eigenvalue.o: string.o
 eigenvalue.o: tally.o
 eigenvalue.o: tracking.o
+eigenvalue.o: cross_section.o
+eigenvalue.o: mic.o
 
 endf.o: constants.o
 endf.o: string.o
@@ -163,6 +165,7 @@ global.o: set_header.o
 global.o: source_header.o
 global.o: tally_header.o
 global.o: timer_header.o
+global.o: particle_header.o
 
 hdf5_summary.o: ace_header.o
 hdf5_summary.o: constants.o
