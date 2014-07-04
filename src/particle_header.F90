@@ -1,6 +1,6 @@
 module particle_header
 
-  use constants,       only: NEUTRON, ONE, NONE, ZERO
+  use constants,       only: NEUTRON, ONE, NONE, ZERO, MAX_NUCLIDES
   use geometry_header, only: BASE_UNIVERSE
 
   implicit none
@@ -91,11 +91,15 @@ module particle_header
 
   type BankedParticle
     ! Basic data
-    integer(8) :: id            ! Unique ID
-    integer    :: type          ! Particle type (n, p, e, etc)
-    integer    :: material      ! index for current material
-    real(8)    :: E             ! energy
-    integer    :: energy_index  ! unionized energy index
+    integer(8) :: id                  ! Unique ID
+    integer    :: type                ! Particle type (n, p, e, etc)
+    integer    :: material            ! index for current material
+    real(8)    :: E                   ! energy
+    integer    :: energy_index        ! unionized energy index
+    logical    :: check_sab           ! whether this material has S(a,b) tables
+    integer    :: n_nuclides          ! number of nuclides
+    integer    :: nuclides(MAX_NUCLIDES) ! A copy of the nuclides
+    real(8)    :: atom_density(MAX_NUCLIDES)  ! atom density of a nuclide
   end type BankedParticle
 
 contains

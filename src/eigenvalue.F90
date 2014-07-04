@@ -954,7 +954,7 @@ contains
     if (thread_id == 0) then
       n_bank_xs = total_xs
       xs_bank(1:n_bank_xs) = master_xs_bank(1:n_bank_xs)
-      print *, "xs:", xs_bank
+      !print *, "xs:", xs_bank
     else
       n_bank_xs = 0
     end if

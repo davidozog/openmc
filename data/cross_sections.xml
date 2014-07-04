@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <cross_sections>
   <directory>
-    /home/ozog/usr/src/openmc-bare/data
+    /home/dozog/Repos/openmc-mic/data
   </directory>
   <filetype>
     binary

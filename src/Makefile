@@ -67,12 +67,13 @@ endif
 
 ifeq ($(COMPILER),intel)
   F90 = ifort
-  F90FLAGS := -fpp -std08 -assume byterecl -traceback -opt-report-phase=offload
+  F90FLAGS := -fpp -std08 -assume byterecl -traceback -opt-report-phase=offload -vec-report=3
   LDFLAGS =
 
   # Debugging
   ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+    #F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+    F90FLAGS += -warn -fp-stack-check -fpe0
     LDFLAGS  += -g
   endif
 
