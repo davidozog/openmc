@@ -12,7 +12,7 @@ xml_lib = -Lxml/lib -lxml
 COMPILER = intel
 DEBUG    = yes
 PROFILE  = no
-OPTIMIZE = no
+OPTIMIZE = yes
 MPI      = no
 OPENMP   = yes
 HDF5     = no
@@ -72,8 +72,9 @@ ifeq ($(COMPILER),intel)
 
   # Debugging
   ifeq ($(DEBUG),yes)
-    #F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
-    F90FLAGS += -warn -fp-stack-check -fpe0
+    F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+		#For -vec-report to work:
+    #F90FLAGS += -warn -fp-stack-check -fpe0
     LDFLAGS  += -g
   endif
 

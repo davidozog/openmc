@@ -85,8 +85,8 @@ module particle_header
   end type Particle
 
 !===============================================================================
-! PARTICLESTACK describes the state of a particle being transported through the
-! geometry
+! BANKEDPARTICLE constains the necessary state variables of a particle that
+! needs to performance cross section lookups (for vectorization purposes)
 !===============================================================================
 
   type BankedParticle
@@ -98,7 +98,7 @@ module particle_header
     integer    :: energy_index        ! unionized energy index
     logical    :: check_sab           ! whether this material has S(a,b) tables
     integer    :: n_nuclides          ! number of nuclides
-    integer    :: nuclides(MAX_NUCLIDES) ! A copy of the nuclides
+    integer    :: nuclides(MAX_NUCLIDES) ! Indices of the nuclides
     real(8)    :: atom_density(MAX_NUCLIDES)  ! atom density of a nuclide
   end type BankedParticle
 

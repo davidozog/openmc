@@ -2,6 +2,17 @@ module mic
   
   implicit none
 
+  integer, allocatable, save :: mic_materials(:)
+  integer, allocatable, save :: mic_n_nuclides(:)
+  integer, allocatable, save :: mic_base_nuclides(:)
+  integer, allocatable, save :: mic_nuclides(:)
+  public mic_materials, mic_n_nuclides, mic_base_nuclides, mic_nuclides
+
+!dir$ attributes offload:mic :: mic_materials, mic_n_nuclides, &
+!dir$                           mic_base_nuclides, mic_nuclides
+!dir$ attributes align:64 :: mic_materials, mic_n_nuclides, mic_base_nuclides, &
+!dir$                        mic_nuclides
+
 contains 
 
   subroutine mic_func()

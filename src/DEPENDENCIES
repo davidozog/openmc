@@ -86,6 +86,7 @@ cross_section.o: material_header.o
 cross_section.o: particle_header.o
 cross_section.o: random_lcg.o
 cross_section.o: search.o
+cross_section.o: mic.o
 
 doppler.o: constants.o
 
@@ -199,6 +200,7 @@ initialize.o: state_point.o
 initialize.o: string.o
 initialize.o: tally_header.o
 initialize.o: tally_initialize.o
+initialize.o: mic.o
 
 input_xml.o: cmfd_input.o
 input_xml.o: constants.o

@@ -1,6 +1,6 @@
 module initialize
 
-  use ace,              only: read_xs
+  use ace,              only: read_xs, mic_total_nuclides
   use bank_header,      only: Bank
   use constants
   use dict_header,      only: DictIntInt, ElemKeyValueII
@@ -21,6 +21,8 @@ module initialize
   use string,           only: to_str, str_to_int, starts_with, ends_with
   use tally_header,     only: TallyObject, TallyResult
   use tally_initialize, only: configure_tallies
+  use mic,              only: mic_materials, mic_n_nuclides, mic_base_nuclides,& 
+                              mic_nuclides
 
 #ifdef MPI
   use mpi
@@ -157,6 +159,9 @@ contains
       message = "Cell overlap checking is ON"
       call warning()
     end if
+
+    ! Initialize data for MIC offload
+    call mic_initialize()
 
     ! Stop initialization timer
     call time_initialize % stop()
@@ -903,5 +908,58 @@ contains
     end if
 
   end subroutine allocate_banks
+
+!===============================================================================
+! MIC_INITIALIZE prepares data structures to be sent to the MIC for offload
+!===============================================================================
+
+  subroutine mic_initialize()
+    
+    integer :: i, j, n_nuclide, i_nuclide
+
+    message = "Initializing MIC data structures..."
+    call write_message(6)
+
+    allocate(mic_materials(n_materials))
+    allocate(mic_n_nuclides(n_materials))
+    allocate(mic_base_nuclides(n_materials))
+    allocate(mic_nuclides(mic_total_nuclides))
+
+    mic_base_nuclides(1) = 1 
+    i_nuclide = 0
+
+    print *, "n_materials:", n_materials
+    print *, "n_nuclides_total:", n_nuclides_total
+    print *, "mic_total_nuclides:", mic_total_nuclides 
+
+    do i = 1, n_materials
+      print *, "i[in]:", i
+      n_nuclide = materials(i) % n_nuclides
+      mic_materials(i) = materials(i) % id
+      mic_n_nuclides(i) = n_nuclide
+      if (i /= n_materials) &
+        mic_base_nuclides(i+1) = mic_base_nuclides(i) + n_nuclide
+      print *, "i[out]:", i
+
+
+
+      do j = 1, n_nuclide
+        print *, "j[in]:", j
+        if (j /= n_nuclide) &
+          mic_nuclides(i_nuclide+j) = nuclides(materials(i) % nuclide(j)) % n_grid
+
+        ! TODO: create associated energy grids and cross section arrays
+        ! ...
+
+        print *, "j[out]:", j
+
+      end do
+      i_nuclide = i_nuclide + n_nuclide
+
+    end do
+
+    print *, "TOTAL NUCLIDES:", i_nuclide 
+
+  end subroutine mic_initialize
 
 end module initialize
