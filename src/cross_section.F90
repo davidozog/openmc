@@ -9,7 +9,8 @@ module cross_section
   use particle_header, only: Particle
   use random_lcg,      only: prn
   use search,          only: binary_search
-  use mic,             only: mic_materials
+  use mic,             only: MICNuclide, mic_materials, mic_n_nuclides_total,  &
+                             mic_nuclides, mic_energy
   use omp_lib
 
   implicit none
@@ -41,8 +42,7 @@ contains
     xs_bank(current_bank_slot) % check_sab  = (mat % n_sab > 0)
     xs_bank(current_bank_slot) % n_nuclides = mat % n_nuclides
 
-!dir$ simd
-    do i=1, n_nuclides_total
+    do i=1, mat % n_nuclides
       xs_bank(current_bank_slot) % nuclides(i) = mat % nuclide(i)
       xs_bank(current_bank_slot) % atom_density(i) = mat % atom_density(i)
     end do
@@ -102,7 +102,7 @@ contains
     end do
 
 !dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs)), &
-!dir$        in(mic_materials)
+!dir$        in(mic_materials, mic_nuclides, mic_energy)
 !$omp parallel do private(atom_density,mymaterial_xs,mymicro_xs), &
 !$omp             private(i_nuclide,i_sab)
     do pp = 1, total_xs
@@ -114,7 +114,7 @@ contains
 !NOTE: might need a "simd" pragma here
 !dir$ ivdep
       do i = 1, master_xs_bank(pp) % n_nuclides
-        print *, "OK..."
+!       print *, "OK..."
         i_sab = 0
 !       if (master_xs_bank(pp) % check_sab) then
 !         if (i == mat % i_sab_nuclides(j)) then
@@ -124,17 +124,14 @@ contains
 
         i_nuclide = master_xs_bank(pp) % nuclides(i)
         ! Calculate microscopic cross section for this nuclide
-        !if (master_xs_bank(pp) % E /= mymicro_xs(i_nuclide) % last_E) then
-        !  print *, "calling1!"
-        !  call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
-        !  mymicro_xs, master_xs_bank(pp) % )
-        !  print *, "out1!"
-        !else if (i_sab /= mymicro_xs(i_nuclide) % last_index_sab) then
-        !  print *, "calling2!"
-        !  call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
-        !  mymicro_xs)
-        !  print *, "out2!"
-        !end if
+        if (master_xs_bank(pp) % E /= mymicro_xs(i_nuclide) % last_E) then
+          call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
+              mymicro_xs, master_xs_bank(pp) % energy_index)
+        else if (i_sab /= mymicro_xs(i_nuclide) % last_index_sab) then
+          call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
+              mymicro_xs, master_xs_bank(pp) % energy_index)
+        end if
+        print *, "out!"
 
         ! Copy atom density of nuclide in material
         atom_density = master_xs_bank(pp) % atom_density(i)
@@ -377,30 +374,37 @@ contains
 !===============================================================================
 
 !DIR$ attributes offload:mic :: calculate_nuclide_xs
-  subroutine calculate_nuclide_xs(i_nuclide, i_sab, E, mymicro_xs)
+  subroutine calculate_nuclide_xs(i_nuclide, i_sab, E, mymicro_xs, i_grid)
 
     integer, intent(in) :: i_nuclide ! index into nuclides array
     integer, intent(in) :: i_sab     ! index into sab_tables array
     real(8), intent(in) :: E         ! energy
-    type(NuclideMicroXS), intent(inout) :: mymicro_xs(n_nuclides_total)  ! Cache for each nuclide
+    type(NuclideMicroXS), intent(inout) :: mymicro_xs(mic_n_nuclides_total)  ! Cache for each nuclide
 
-    integer :: i_grid ! index on nuclide energy grid
+    integer, intent(in) :: i_grid ! index on nuclide energy grid
     real(8) :: f      ! interp factor on nuclide energy grid
-    type(Nuclide), pointer, save :: nuc => null()
+    type(MICNuclide), pointer, save :: nuc => null()
+    integer :: E_idx                 ! index into grid_index
+!   type(Nuclide), pointer, save :: nuc => null()
 !$omp threadprivate(nuc)
 
     ! Set pointer to nuclide
-!    nuc => nuclides(i_nuclide)
-!    print *, "nuclide:", nuclides(i_nuclide), "for", i_nuclide
-!
-!!NOTE: ONLY UNIONIZED GRID SUPPORTED:
-!    ! Determine index on nuclide energy grid
-!!   select case (grid_method)
-!!   case (GRID_UNION)
+    nuc => mic_nuclides(i_nuclide)
+    print *, "nuclide:", mic_nuclides(i_nuclide), "for", i_nuclide
+    print *, "base_idx:", mic_nuclides(i_nuclide) % base_idx
+    print *, "n_grid:", mic_nuclides(i_nuclide) % n_grid
+
+    E_idx = mic_nuclides(i_nuclide) % base_idx + i_grid
+
+!NOTE: ONLY UNIONIZED GRID SUPPORTED:
+    ! Determine index on nuclide energy grid
+!   select case (grid_method)
+!   case (GRID_UNION)
 !      ! If we're using the unionized grid with pointers, finding the index on
 !      ! the nuclide energy grid is as simple as looking up the pointer
 !
-!      i_grid = nuc % grid_index(union_grid_index)
+!      i_grid = nuc % grid_index(E_idx)
+!      i_grid = mic_grid_index(nuc % base_idx)
 !
 !!   case (GRID_NUCLIDE)
 !      ! If we're not using the unionized grid, we have to do a binary search on
@@ -417,8 +421,9 @@ contains
 !
 !!   end select
 !
-!    ! check for rare case where two energy points are the same
-!    if (nuc % energy(i_grid) == nuc % energy(i_grid+1)) i_grid = i_grid + 1
+    ! check for rare case where two energy points are the same
+!   if (nuc % energy(i_grid) == nuc % energy(i_grid+1)) i_grid = i_grid + 1
+    if (mic_energy(E_idx) == mic_energy(E_idx+1)) E_idx = E_idx + 1
 !
 !    ! calculate interpolation factor
 !    f = (E - nuc%energy(i_grid))/(nuc%energy(i_grid+1) - nuc%energy(i_grid))

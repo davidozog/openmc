@@ -21,8 +21,10 @@ module initialize
   use string,           only: to_str, str_to_int, starts_with, ends_with
   use tally_header,     only: TallyObject, TallyResult
   use tally_initialize, only: configure_tallies
-  use mic,              only: mic_materials, mic_n_nuclides, mic_base_nuclides,& 
-                              mic_nuclides
+  use mic,              only: mic_materials, mic_n_nuclides, mic_grid_index,   & 
+                              mic_energy, mic_total, mic_elastic, mic_fission, &
+                              mic_nu_fission, mic_absorption, mic_heating,     &
+                              mic_nuclides, mic_n_nuclides_total
 
 #ifdef MPI
   use mpi
@@ -915,50 +917,88 @@ contains
 
   subroutine mic_initialize()
     
-    integer :: i, j, n_nuclide, i_nuclide
+    integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
 
     message = "Initializing MIC data structures..."
     call write_message(6)
 
+    mic_n_nuclides_total = n_nuclides_total
     allocate(mic_materials(n_materials))
     allocate(mic_n_nuclides(n_materials))
-    allocate(mic_base_nuclides(n_materials))
     allocate(mic_nuclides(mic_total_nuclides))
 
-    mic_base_nuclides(1) = 1 
+    mic_nuclides(1) % base_idx = 1 
     i_nuclide = 0
+    n_grid_total = 0
 
     print *, "n_materials:", n_materials
     print *, "n_nuclides_total:", n_nuclides_total
     print *, "mic_total_nuclides:", mic_total_nuclides 
 
-    do i = 1, n_materials
-      print *, "i[in]:", i
-      n_nuclide = materials(i) % n_nuclides
-      mic_materials(i) = materials(i) % id
-      mic_n_nuclides(i) = n_nuclide
-      if (i /= n_materials) &
-        mic_base_nuclides(i+1) = mic_base_nuclides(i) + n_nuclide
-      print *, "i[out]:", i
+    do i = 1, n_nuclides_total
+      ngrd = nuclides(i) % n_grid
+      mic_nuclides(i) % n_grid = ngrd
+      if (i /= n_nuclides_total) then
+        mic_nuclides(i+1) % base_idx = mic_nuclides(i) % base_idx + ngrd
+      end if
 
-
-
-      do j = 1, n_nuclide
-        print *, "j[in]:", j
-        if (j /= n_nuclide) &
-          mic_nuclides(i_nuclide+j) = nuclides(materials(i) % nuclide(j)) % n_grid
-
-        ! TODO: create associated energy grids and cross section arrays
-        ! ...
-
-        print *, "j[out]:", j
-
-      end do
-      i_nuclide = i_nuclide + n_nuclide
+!   Keep track of how much memory needs to be allocated
+      n_grid_total = n_grid_total + ngrd
 
     end do
 
-    print *, "TOTAL NUCLIDES:", i_nuclide 
+    print *, "n_grid_total:", n_grid_total
+
+    allocate(mic_grid_index(n_grid_total))
+    allocate(mic_energy(n_grid_total))
+    allocate(mic_total(n_grid_total))                 ! total cross section
+    allocate(mic_elastic(n_grid_total))               ! elastic scattering
+    allocate(mic_fission(n_grid_total))               ! fission
+    allocate(mic_nu_fission(n_grid_total))            ! neutron production
+    allocate(mic_absorption(n_grid_total))            ! absorption (MT > 100)
+!   allocate(mic_heating(n_grid_total))               ! heating
+
+! create associated energy grids and cross section arrays
+    n_grid_total = 0
+    do i = 1, n_nuclides_total
+      ngrd = nuclides(i) % n_grid
+      do j = 1, ngrd
+        jdx = j + n_grid_total
+        mic_grid_index(jdx) = nuclides(i) % grid_index(j)
+        mic_energy(jdx) = nuclides(i) % energy(j)
+        mic_total(jdx) = nuclides(i) % total(j)
+        mic_elastic(jdx) = nuclides(i) % elastic(j)
+        mic_fission(jdx) = nuclides(i) % fission(j)
+        mic_nu_fission(jdx) = nuclides(i) % nu_fission(j)
+        mic_absorption(jdx) = nuclides(i) % absorption(j)
+!       mic_heating(jdx) = nuclides(i) % heating(j)
+      end do
+      n_grid_total = n_grid_total + ngrd
+    end do
+
+!    do i = 1, n_materials
+!      print *, "i[in]:", i
+!      n_nuclide = materials(i) % n_nuclides
+!      mic_materials(i) = materials(i) % id
+!      mic_n_nuclides(i) = n_nuclide
+!      mic_base_nuclides(i+1) = mic_base_nuclides(i) + n_nuclide
+!      print *, "i[out]:", i
+!
+!      do j = 1, n_nuclide
+!        print *, "j[in]:", j
+!        mic_nuclides(i_nuclide+j) = nuclides(materials(i) % nuclide(j)) % n_grid
+!
+!        ! TODO: create associated energy grids and cross section arrays
+!        ! ...
+!
+!        print *, "j[out]:", j
+!
+!      end do
+!      i_nuclide = i_nuclide + n_nuclide
+!
+!    end do
+!
+!    print *, "TOTAL NUCLIDES:", i_nuclide 
 
   end subroutine mic_initialize
 
