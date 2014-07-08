@@ -918,6 +918,7 @@ contains
   subroutine mic_initialize()
     
     integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
+    type(Nuclide), pointer, save :: nuc => null()
 
     message = "Initializing MIC data structures..."
     call write_message(6)
@@ -934,12 +935,15 @@ contains
     print *, "n_materials:", n_materials
     print *, "n_nuclides_total:", n_nuclides_total
     print *, "mic_total_nuclides:", mic_total_nuclides 
+    print *, "global n_grid", n_grid
 
     do i = 1, n_nuclides_total
       ngrd = nuclides(i) % n_grid
       mic_nuclides(i) % n_grid = ngrd
       if (i /= n_nuclides_total) then
         mic_nuclides(i+1) % base_idx = mic_nuclides(i) % base_idx + ngrd
+        print *, "nuclide:", i, "base_idx:", mic_nuclides(i) % base_idx, &
+                 "n_grid:", ngrd
       end if
 
 !   Keep track of how much memory needs to be allocated
@@ -961,20 +965,27 @@ contains
 ! create associated energy grids and cross section arrays
     n_grid_total = 0
     do i = 1, n_nuclides_total
-      ngrd = nuclides(i) % n_grid
+      nuc => nuclides(i)
+      ngrd = nuc % n_grid
       do j = 1, ngrd
         jdx = j + n_grid_total
-        mic_grid_index(jdx) = nuclides(i) % grid_index(j)
-        mic_energy(jdx) = nuclides(i) % energy(j)
-        mic_total(jdx) = nuclides(i) % total(j)
-        mic_elastic(jdx) = nuclides(i) % elastic(j)
-        mic_fission(jdx) = nuclides(i) % fission(j)
-        mic_nu_fission(jdx) = nuclides(i) % nu_fission(j)
-        mic_absorption(jdx) = nuclides(i) % absorption(j)
-!       mic_heating(jdx) = nuclides(i) % heating(j)
+        mic_energy(jdx) = nuc % energy(j)
+        mic_total(jdx) = nuc % total(j)
+        mic_elastic(jdx) = nuc % elastic(j)
+        mic_fission(jdx) = nuc % fission(j)
+        mic_nu_fission(jdx) = nuc % nu_fission(j)
+        mic_absorption(jdx) = nuc % absorption(j)
+!       mic_heating(jdx) = nuc % heating(j)
       end do
+      
+      do j = 1, ngrd
+        mic_grid_index(j + n_grid_total) = nuc % grid_index(j)
+      end do
+
       n_grid_total = n_grid_total + ngrd
+
     end do
+
 
 !    do i = 1, n_materials
 !      print *, "i[in]:", i

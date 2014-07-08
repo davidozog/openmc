@@ -10,7 +10,7 @@ module cross_section
   use random_lcg,      only: prn
   use search,          only: binary_search
   use mic,             only: MICNuclide, mic_materials, mic_n_nuclides_total,  &
-                             mic_nuclides, mic_energy
+                             mic_nuclides, mic_energy, mic_grid_index
   use omp_lib
 
   implicit none
@@ -102,7 +102,7 @@ contains
     end do
 
 !dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs)), &
-!dir$        in(mic_materials, mic_nuclides, mic_energy)
+!dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index)
 !$omp parallel do private(atom_density,mymaterial_xs,mymicro_xs), &
 !$omp             private(i_nuclide,i_sab)
     do pp = 1, total_xs
@@ -390,11 +390,12 @@ contains
 
     ! Set pointer to nuclide
     nuc => mic_nuclides(i_nuclide)
-    print *, "nuclide:", mic_nuclides(i_nuclide), "for", i_nuclide
+    print *, "nuclide:", i_nuclide, "i_grid", i_grid
     print *, "base_idx:", mic_nuclides(i_nuclide) % base_idx
     print *, "n_grid:", mic_nuclides(i_nuclide) % n_grid
+    print *, "E_idx:", mic_grid_index(i_grid)
 
-    E_idx = mic_nuclides(i_nuclide) % base_idx + i_grid
+    E_idx = mic_grid_index(i_grid)
 
 !NOTE: ONLY UNIONIZED GRID SUPPORTED:
     ! Determine index on nuclide energy grid
