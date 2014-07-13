@@ -18,13 +18,10 @@ module ace
   integer :: JXS(32)             ! Pointers into ACE XSS tables
   real(8), allocatable :: XSS(:) ! Cross section data
   integer :: XSS_index           ! current index in XSS data
-  integer :: mic_total_nuclides
 
   private :: NXS
   private :: JXS
   private :: XSS
-
-  public :: mic_total_nuclides
 
 contains
 
@@ -50,8 +47,6 @@ contains
     type(Nuclide),    pointer :: nuc => null()
     type(SAlphaBeta), pointer :: sab => null()
     type(SetChar) :: already_read
-
-    mic_total_nuclides = 0
 
     ! allocate arrays for ACE table storage and cross section cache
     allocate(nuclides(n_nuclides_total))
@@ -89,8 +84,6 @@ contains
           call already_read % add(alias)
 
         end if
-
-        mic_total_nuclides = mic_total_nuclides + 1
 
       end do NUCLIDE_LOOP
 

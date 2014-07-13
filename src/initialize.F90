@@ -1,6 +1,6 @@
 module initialize
 
-  use ace,              only: read_xs, mic_total_nuclides
+  use ace,              only: read_xs
   use bank_header,      only: Bank
   use constants
   use dict_header,      only: DictIntInt, ElemKeyValueII
@@ -926,7 +926,7 @@ contains
     mic_n_nuclides_total = n_nuclides_total
     allocate(mic_materials(n_materials))
     allocate(mic_n_nuclides(n_materials))
-    allocate(mic_nuclides(mic_total_nuclides))
+    allocate(mic_nuclides(n_nuclides_total))
 
     mic_nuclides(1) % base_idx = 1 
     i_nuclide = 0
@@ -934,22 +934,37 @@ contains
 
     print *, "n_materials:", n_materials
     print *, "n_nuclides_total:", n_nuclides_total
-    print *, "mic_total_nuclides:", mic_total_nuclides 
     print *, "global n_grid", n_grid
 
     do i = 1, n_nuclides_total
-      ngrd = nuclides(i) % n_grid
+      nuc => nuclides(i)
+      ngrd = nuc % n_grid
       mic_nuclides(i) % n_grid = ngrd
+      mic_nuclides(i) % fissionable = nuc % fissionable
+      mic_nuclides(i) % n_reaction = nuc % n_reaction
+      mic_nuclides(i) % urr = urr_ptables_on .and. nuc % urr_present
       if (i /= n_nuclides_total) then
         mic_nuclides(i+1) % base_idx = mic_nuclides(i) % base_idx + ngrd
-        print *, "nuclide:", i, "base_idx:", mic_nuclides(i) % base_idx, &
-                 "n_grid:", ngrd
+      end if
+      print *, "nuclide:", i, "base_idx:", mic_nuclides(i) % base_idx, &
+               "n_grid:", ngrd, "urr_present:", nuc % urr_present, &
+               "n_reaction:", nuc % n_reaction
+      if (nuclides(i) % fissionable) then
+        print*, "index_fission:", nuc % index_fission(1)
+        mic_nuclides(i) % index_fission(1) = nuc % index_fission(1)
+        mic_nuclides(i) % Q_value = &
+          nuc % reactions (nuc % index_fission(1)) % Q_value
       end if
 
 !   Keep track of how much memory needs to be allocated
       n_grid_total = n_grid_total + ngrd
 
     end do
+
+    if (urr_ptables_on) then
+      print *, "URR XS IS NOT SUPPORTED ON MIC"
+      stop 2
+    end if
 
     print *, "n_grid_total:", n_grid_total
 
@@ -987,7 +1002,10 @@ contains
     end do
 
 
-!    do i = 1, n_materials
+     do i = 1, n_materials
+       if (materials(i) % n_sab > 0) then
+         print *, "SAB NOT SUPPORTED"
+       end if
 !      print *, "i[in]:", i
 !      n_nuclide = materials(i) % n_nuclides
 !      mic_materials(i) = materials(i) % id
@@ -1007,7 +1025,7 @@ contains
 !      end do
 !      i_nuclide = i_nuclide + n_nuclide
 !
-!    end do
+     end do
 !
 !    print *, "TOTAL NUCLIDES:", i_nuclide 
 

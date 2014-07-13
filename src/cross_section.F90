@@ -10,7 +10,9 @@ module cross_section
   use random_lcg,      only: prn
   use search,          only: binary_search
   use mic,             only: MICNuclide, mic_materials, mic_n_nuclides_total,  &
-                             mic_nuclides, mic_energy, mic_grid_index
+                             mic_nuclides, mic_energy, mic_grid_index,         &
+                             mic_total, mic_elastic, mic_absorption,           &
+                             mic_fission, mic_nu_fission
   use omp_lib
 
   implicit none
@@ -99,28 +101,50 @@ contains
 
     do i=1, n_nuclides_total
       mymicro_xs(i) = micro_xs(i)
+      print *, "MYMICRO-host:", mymicro_xs(i)
     end do
 
+    print *, "DOING:", total_xs
+
 !dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs)), &
-!dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index)
-!$omp parallel do private(atom_density,mymaterial_xs,mymicro_xs), &
-!$omp             private(i_nuclide,i_sab)
+!dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index, &
+!dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
+!dir$           mic_nu_fission, mic_n_nuclides_total, mymaterial_xs) 
+!$omp parallel do firstprivate(mymaterial_xs) &
+!$omp             private(mymicro_xs,atom_density,i_nuclide,i_sab)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
 
-!     j = 1
+      j = 1
 
-      print *, "hi:", omp_get_thread_num(), master_xs_bank(pp) % n_nuclides
+!   do i=1, mic_n_nuclides_total
+!     print *, "MYMIRCRO-mic:", mymicro_xs(i)
+!   end do
+
 !NOTE: might need a "simd" pragma here
 !dir$ ivdep
-      do i = 1, master_xs_bank(pp) % n_nuclides
-!       print *, "OK..."
+      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, master_xs_bank(pp) % n_nuclides
+        ! ======================================================================
+        ! CHECK FOR S(A,B) TABLE
         i_sab = 0
-!       if (master_xs_bank(pp) % check_sab) then
-!         if (i == mat % i_sab_nuclides(j)) then
-!           ...
-!         end if
-!       end if
+        ! Check if this nuclide matches one of the S(a,b) tables specified --
+        ! this relies on i_sab_nuclides being in sorted order
+!        if (master_xs_bank(pp) % check_sab) then
+!          if (i == mat % i_sab_nuclides(j)) then
+!            ! Get index in sab_tables
+!            i_sab = mat % i_sab_tables(j)
+!
+!            ! If particle energy is greater than highest energy for the
+!            ! S(a,v) table, don't use the S(a,b) table
+!            if (master_xs_bank(pp) % E > sab_tables(i_sab) % threshold_inelastic) i_sab = 0
+!
+!            ! Increment position in i_sab_nuclides
+!            j = j + 1
+!
+!            ! Don't check for S(a,b) tables if there are no more left
+!            if (j > mat % n_sab) check_sab = .false.
+!          end if
+!        end if
 
         i_nuclide = master_xs_bank(pp) % nuclides(i)
         ! Calculate microscopic cross section for this nuclide
@@ -131,7 +155,6 @@ contains
           call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
               mymicro_xs, master_xs_bank(pp) % energy_index)
         end if
-        print *, "out!"
 
         ! Copy atom density of nuclide in material
         atom_density = master_xs_bank(pp) % atom_density(i)
@@ -160,99 +183,105 @@ contains
         mymaterial_xs % kappa_fission = mymaterial_xs % kappa_fission + &
              atom_density * mymicro_xs(i_nuclide) % kappa_fission
 
-      end do
+      print *, "particle:", master_xs_bank(pp) % id, "nuc", i, "material_xs:", mymaterial_xs
+!      print *, "MYMIRCRO-after-call:", mymicro_xs(i_nuclide) % total, &
+!      "i_nuclide:", i_nuclide
 
-    end do
+      end do NUCLIDES_IN_MATERIAL_LOOP
+
+    end do 
 !dir$ end offload 
 
-    do pp = 1, total_xs
 
-      print *, "here" 
 
-      ! Exit subroutine if material is void
-      !if (xs_bank(pp) % material == MATERIAL_VOID) return
-
-!     mat => materials(xs_bank(pp) % material)
-
-      ! Find energy index on unionized grid
-      !if (grid_method == GRID_UNION) call find_energy_index(xs_bank(pp) % E)
-
-      ! Determine if this material has S(a,b) tables
-!     check_sab = (mat % n_sab > 0)
-
-      ! Initialize position in i_sab_nuclides
-!     j = 1
-
-      ! Add contribution from each nuclide in material
-      do i = 1, mat % n_nuclides
-        ! ======================================================================
-        ! CHECK FOR S(A,B) TABLE
-
-!       i_sab = 0
-
-        ! Check if this nuclide matches one of the S(a,b) tables specified --
-        ! this relies on i_sab_nuclides being in sorted order
-        if (check_sab) then
-          if (i == mat % i_sab_nuclides(j)) then
-            ! Get index in sab_tables
-            i_sab = mat % i_sab_tables(j)
-
-            ! If particle energy is greater than highest energy for the
-            ! S(a,v) table, don't use the S(a,b) table
-            if (xs_bank(pp) % E > sab_tables(i_sab) % threshold_inelastic) i_sab = 0
-
-            ! Increment position in i_sab_nuclides
-            j = j + 1
-
-            ! Don't check for S(a,b) tables if there are no more left
-            if (j > mat % n_sab) check_sab = .false.
-          end if
-        end if
-
-        ! ======================================================================
-        ! CALCULATE MICROSCOPIC CROSS SECTION
-
-        ! Determine microscopic cross sections for this nuclide
-!       i_nuclide = mat % nuclide(i)
-
-        ! Calculate microscopic cross section for this nuclide
-        !if (xs_bank(pp) % E /= micro_xs(i_nuclide) % last_E) then
-        !  call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
-        !else if (i_sab /= micro_xs(i_nuclide) % last_index_sab) then
-        !  call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
-        !end if
-
-        ! ======================================================================
-        ! ADD TO MACROSCOPIC CROSS SECTION
-
-        ! Copy atom density of nuclide in material
-        atom_density = mat % atom_density(i)
-
-        ! Add contributions to material macroscopic total cross section
-        material_xs % total = material_xs % total + &
-             atom_density * micro_xs(i_nuclide) % total
-
-        ! Add contributions to material macroscopic scattering cross section
-        material_xs % elastic = material_xs % elastic + &
-             atom_density * micro_xs(i_nuclide) % elastic
-
-        ! Add contributions to material macroscopic absorption cross section
-        material_xs % absorption = material_xs % absorption + & 
-             atom_density * micro_xs(i_nuclide) % absorption
-
-        ! Add contributions to material macroscopic fission cross section
-        material_xs % fission = material_xs % fission + &
-             atom_density * micro_xs(i_nuclide) % fission
-
-        ! Add contributions to material macroscopic nu-fission cross section
-        material_xs % nu_fission = material_xs % nu_fission + &
-             atom_density * micro_xs(i_nuclide) % nu_fission
-             
-        ! Add contributions to material macroscopic energy release from fission
-        material_xs % kappa_fission = material_xs % kappa_fission + &
-             atom_density * micro_xs(i_nuclide) % kappa_fission
-      end do
-    end do
+!    do pp = 1, total_xs
+!
+!      print *, "here" 
+!
+!      ! Exit subroutine if material is void
+!      !if (xs_bank(pp) % material == MATERIAL_VOID) return
+!
+!      mat => materials(xs_bank(pp) % material)
+!
+!      ! Find energy index on unionized grid
+!      !if (grid_method == GRID_UNION) call find_energy_index(xs_bank(pp) % E)
+!
+!      ! Determine if this material has S(a,b) tables
+!      check_sab = (mat % n_sab > 0)
+!
+!      ! Initialize position in i_sab_nuclides
+!      j = 1
+!
+!      ! Add contribution from each nuclide in material
+!      do i = 1, mat % n_nuclides
+!        ! ======================================================================
+!        ! CHECK FOR S(A,B) TABLE
+!
+!!       i_sab = 0
+!
+!        ! Check if this nuclide matches one of the S(a,b) tables specified --
+!        ! this relies on i_sab_nuclides being in sorted order
+!        if (check_sab) then
+!          if (i == mat % i_sab_nuclides(j)) then
+!            ! Get index in sab_tables
+!            i_sab = mat % i_sab_tables(j)
+!
+!            ! If particle energy is greater than highest energy for the
+!            ! S(a,v) table, don't use the S(a,b) table
+!            if (xs_bank(pp) % E > sab_tables(i_sab) % threshold_inelastic) i_sab = 0
+!
+!            ! Increment position in i_sab_nuclides
+!            j = j + 1
+!
+!            ! Don't check for S(a,b) tables if there are no more left
+!            if (j > mat % n_sab) check_sab = .false.
+!          end if
+!        end if
+!
+!        ! ======================================================================
+!        ! CALCULATE MICROSCOPIC CROSS SECTION
+!
+!        ! Determine microscopic cross sections for this nuclide
+!!       i_nuclide = mat % nuclide(i)
+!
+!        ! Calculate microscopic cross section for this nuclide
+!        !if (xs_bank(pp) % E /= micro_xs(i_nuclide) % last_E) then
+!        !  call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
+!        !else if (i_sab /= micro_xs(i_nuclide) % last_index_sab) then
+!        !  call calculate_nuclide_xs(i_nuclide, i_sab, xs_bank(pp) % E)
+!        !end if
+!
+!        ! ======================================================================
+!        ! ADD TO MACROSCOPIC CROSS SECTION
+!
+!        ! Copy atom density of nuclide in material
+!!       atom_density = mat % atom_density(i)
+!
+!!       ! Add contributions to material macroscopic total cross section
+!!       material_xs % total = material_xs % total + &
+!!            atom_density * micro_xs(i_nuclide) % total
+!
+!!       ! Add contributions to material macroscopic scattering cross section
+!!       material_xs % elastic = material_xs % elastic + &
+!!            atom_density * micro_xs(i_nuclide) % elastic
+!
+!!       ! Add contributions to material macroscopic absorption cross section
+!!       material_xs % absorption = material_xs % absorption + & 
+!!            atom_density * micro_xs(i_nuclide) % absorption
+!
+!!       ! Add contributions to material macroscopic fission cross section
+!!       material_xs % fission = material_xs % fission + &
+!!            atom_density * micro_xs(i_nuclide) % fission
+!
+!!       ! Add contributions to material macroscopic nu-fission cross section
+!!       material_xs % nu_fission = material_xs % nu_fission + &
+!!            atom_density * micro_xs(i_nuclide) % nu_fission
+!!            
+!!       ! Add contributions to material macroscopic energy release from fission
+!!       material_xs % kappa_fission = material_xs % kappa_fission + &
+!!            atom_density * micro_xs(i_nuclide) % kappa_fission
+!      end do
+!    end do
 
   end subroutine calculate_bank_xs
 
@@ -390,10 +419,11 @@ contains
 
     ! Set pointer to nuclide
     nuc => mic_nuclides(i_nuclide)
-    print *, "nuclide:", i_nuclide, "i_grid", i_grid
-    print *, "base_idx:", mic_nuclides(i_nuclide) % base_idx
-    print *, "n_grid:", mic_nuclides(i_nuclide) % n_grid
-    print *, "E_idx:", mic_grid_index(i_grid)
+!   print *, "nuclide:", i_nuclide, "i_grid", i_grid
+!   print *, "base_idx:", mic_nuclides(i_nuclide) % base_idx
+!   print *, "n_grid:", mic_nuclides(i_nuclide) % n_grid
+!   print *, "E_idx:", mic_grid_index(i_grid)
+!   print *, "mic_n_nuclides_total:", mic_n_nuclides_total
 
     E_idx = mic_grid_index(i_grid)
 
@@ -426,42 +456,62 @@ contains
 !   if (nuc % energy(i_grid) == nuc % energy(i_grid+1)) i_grid = i_grid + 1
     if (mic_energy(E_idx) == mic_energy(E_idx+1)) E_idx = E_idx + 1
 !
-!    ! calculate interpolation factor
-!    f = (E - nuc%energy(i_grid))/(nuc%energy(i_grid+1) - nuc%energy(i_grid))
+    ! calculate interpolation factor
+!   f = (E - nuc%energy(i_grid))/(nuc%energy(i_grid+1) - nuc%energy(i_grid))
+    f = (E - mic_energy(E_idx))/(mic_energy(E_idx+1) - mic_energy(E_idx))
 !
 !    mymicro_xs(i_nuclide) % index_grid    = i_grid
 !    mymicro_xs(i_nuclide) % interp_factor = f
+     mymicro_xs(i_nuclide) % index_grid    = E_idx
+     mymicro_xs(i_nuclide) % interp_factor = f
 !
-!    ! Initialize sab treatment to false
+     ! Initialize sab treatment to false
 !    mymicro_xs(i_nuclide) % index_sab   = NONE
 !    mymicro_xs(i_nuclide) % elastic_sab = ZERO
 !    mymicro_xs(i_nuclide) % use_ptable  = .false.
+     mymicro_xs(i_nuclide) % index_sab   = NONE
+     mymicro_xs(i_nuclide) % elastic_sab = ZERO
+     mymicro_xs(i_nuclide) % use_ptable  = .false.
 !
 !    ! Initialize nuclide cross-sections to zero
 !    mymicro_xs(i_nuclide) % fission    = ZERO
 !    mymicro_xs(i_nuclide) % nu_fission = ZERO
 !    mymicro_xs(i_nuclide) % kappa_fission  = ZERO
+     mymicro_xs(i_nuclide) % fission    = ZERO
+     mymicro_xs(i_nuclide) % nu_fission = ZERO
+     mymicro_xs(i_nuclide) % kappa_fission  = ZERO
+
 !
 !    ! Calculate microscopic nuclide total cross section
 !    mymicro_xs(i_nuclide) % total = (ONE - f) * nuc % total(i_grid) &
 !         + f * nuc % total(i_grid+1)
+     mymicro_xs(i_nuclide) % total = (ONE - f) * mic_total(E_idx) &
+          + f * mic_total(E_idx+1)
 !
 !    ! Calculate microscopic nuclide total cross section
 !    mymicro_xs(i_nuclide) % elastic = (ONE - f) * nuc % elastic(i_grid) &
 !         + f * nuc % elastic(i_grid+1)
+     mymicro_xs(i_nuclide) % elastic = (ONE - f) * mic_elastic(E_idx) &
+          + f * mic_elastic(E_idx+1)
 !
 !    ! Calculate microscopic nuclide absorption cross section
 !    mymicro_xs(i_nuclide) % absorption = (ONE - f) * nuc % absorption( &
 !         i_grid) + f * nuc % absorption(i_grid+1)
+     mymicro_xs(i_nuclide) % absorption = (ONE - f) * mic_absorption( &
+          E_idx) + f * mic_absorption(E_idx+1)
 !
-!    if (nuc % fissionable) then
+     if (nuc % fissionable) then
 !      ! Calculate microscopic nuclide total cross section
 !      mymicro_xs(i_nuclide) % fission = (ONE - f) * nuc % fission(i_grid) &
 !           + f * nuc % fission(i_grid+1)
+       mymicro_xs(i_nuclide) % fission = (ONE - f) * mic_fission(E_idx) &
+            + f * mic_fission(E_idx+1)
 !
 !      ! Calculate microscopic nuclide nu-fission cross section
 !      mymicro_xs(i_nuclide) % nu_fission = (ONE - f) * nuc % nu_fission( &
 !           i_grid) + f * nuc % nu_fission(i_grid+1)
+       mymicro_xs(i_nuclide) % nu_fission = (ONE - f) * mic_nu_fission( &
+            E_idx) + f * mic_nu_fission(E_idx+1)
 !           
 !      ! Calculate microscopic nuclide kappa-fission cross section
 !      ! The ENDF standard (ENDF-102) states that MT 18 stores
@@ -469,23 +519,26 @@ contains
 !      mymicro_xs(i_nuclide) % kappa_fission = &
 !           nuc % reactions(nuc % index_fission(1)) % Q_value * &
 !           mymicro_xs(i_nuclide) % fission
-!    end if
+       mymicro_xs(i_nuclide) % kappa_fission = &
+            nuc % Q_value * mymicro_xs(i_nuclide) % fission
+     end if
 !
 !    ! If there is S(a,b) data for this nuclide, we need to do a few
 !    ! things. Since the total cross section was based on non-S(a,b) data, we
 !    ! need to correct it by subtracting the non-S(a,b) elastic cross section and
 !    ! then add back in the calculated S(a,b) elastic+inelastic cross section.
 !
-!    if (i_sab > 0) then
-!      print *, "SAB NOT IMPLEMENTED YET."
-!      return
+     if (i_sab > 0) then
+       print *, "SAB NOT IMPLEMENTED YET."
+       stop 1
 !!     call calculate_sab_xs(i_nuclide, i_sab, E)
-!    end if
+     end if
 !
 !    ! if the particle is in the unresolved resonance range and there are
 !    ! probability tables, we need to determine cross sections from the table
 !
 !!NOTE: URR XS NOT SUPPORTED
+!!   if (urr_ptables_on .and. nuc % urr_present) then
 !!   if (urr_ptables_on .and. nuc % urr_present) then
 !!     if (E > nuc % urr_data % energy(1) .and. &
 !!          E < nuc % urr_data % energy(nuc % urr_data % n_energy)) then
@@ -495,6 +548,8 @@ contains
 !
 !    mymicro_xs(i_nuclide) % last_E = E
 !    mymicro_xs(i_nuclide) % last_index_sab = i_sab
+     mymicro_xs(i_nuclide) % last_E = E
+     mymicro_xs(i_nuclide) % last_index_sab = i_sab
 
   end subroutine calculate_nuclide_xs
 

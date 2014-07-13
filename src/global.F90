@@ -84,7 +84,8 @@ module global
   real(8), allocatable :: e_grid(:) ! energies on unionized grid
 
   ! Unreoslved resonance probablity tables
-  logical :: urr_ptables_on = .true.
+! logical :: urr_ptables_on = .true.
+  logical :: urr_ptables_on = .false.
 
   ! Default xs identifier (e.g. 70c)
   character(3):: default_xs

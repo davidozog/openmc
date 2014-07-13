@@ -5,18 +5,23 @@ module mic
   type MICNuclide
     integer :: base_idx
     integer :: n_grid
+    logical :: fissionable
+    integer :: n_reaction
+    integer :: index_fission(1)
+    real(8) :: Q_value
+    logical :: urr
   end type MICNuclide
 
   integer, allocatable, save :: mic_materials(:)
   integer, allocatable, save :: mic_n_nuclides(:)
   integer, allocatable, save :: mic_grid_index(:)
-  integer, allocatable, save :: mic_energy(:)
-  integer, allocatable, save :: mic_total(:)
-  integer, allocatable, save :: mic_elastic(:)
-  integer, allocatable, save :: mic_fission(:)
-  integer, allocatable, save :: mic_nu_fission(:)
-  integer, allocatable, save :: mic_absorption(:)
-  integer, allocatable, save :: mic_heating(:)
+  real(8), allocatable, save :: mic_energy(:)
+  real(8), allocatable, save :: mic_total(:)
+  real(8), allocatable, save :: mic_elastic(:)
+  real(8), allocatable, save :: mic_fission(:)
+  real(8), allocatable, save :: mic_nu_fission(:)
+  real(8), allocatable, save :: mic_absorption(:)
+  real(8), allocatable, save :: mic_heating(:)
   type(MICNuclide), allocatable, target :: mic_nuclides(:)
   integer, save ::  mic_n_nuclides_total 
   public mic_materials, mic_n_nuclides, mic_grid_index, mic_energy, &
