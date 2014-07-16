@@ -9,12 +9,12 @@ xml_lib = -Lxml/lib -lxml
 # User Options
 #===============================================================================
 
-COMPILER = intel
+COMPILER = gnu
 DEBUG    = yes
 PROFILE  = no
-OPTIMIZE = yes
+OPTIMIZE = no
 MPI      = no
-OPENMP   = yes
+OPENMP   = no
 HDF5     = no
 PETSC    = no
 

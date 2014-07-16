@@ -50,7 +50,11 @@ contains
     end do
 
     ! increment number of bank sites
+#ifdef _OPENMP
     n_bank_xs = min(n_bank_xs + 1, work/n_threads+1)
+#else
+    n_bank_xs = min(int(n_bank_xs + 1, 8), work+1)
+#endif
 
     if (xs_bank(current_bank_slot) % material == MATERIAL_VOID) then
       xs_bank(current_bank_slot) % energy_index = -1
@@ -99,10 +103,10 @@ contains
 !    print *, "total_xs is ", total_xs
 !    print *, "bank:", xs_bank
 
-    do i=1, n_nuclides_total
-      mymicro_xs(i) = micro_xs(i)
-      print *, "MYMICRO-host:", mymicro_xs(i)
-    end do
+     do i=1, n_nuclides_total
+       mymicro_xs(i) = micro_xs(i)
+!      print *, "MYMICRO-host:", mymicro_xs(i)
+     end do
 
     print *, "DOING:", total_xs
 
@@ -183,11 +187,14 @@ contains
         mymaterial_xs % kappa_fission = mymaterial_xs % kappa_fission + &
              atom_density * mymicro_xs(i_nuclide) % kappa_fission
 
-      print *, "particle:", master_xs_bank(pp) % id, "nuc", i, "material_xs:", mymaterial_xs
 !      print *, "MYMIRCRO-after-call:", mymicro_xs(i_nuclide) % total, &
 !      "i_nuclide:", i_nuclide
 
+      print *, "particle:", master_xs_bank(pp) % id, "nuc", i, "material_xs:", mymaterial_xs
+      print *, "micro_xs:", mymicro_xs(i_nuclide)
       end do NUCLIDES_IN_MATERIAL_LOOP
+      
+      stop
 
     end do 
 !dir$ end offload 
@@ -459,6 +466,9 @@ contains
     ! calculate interpolation factor
 !   f = (E - nuc%energy(i_grid))/(nuc%energy(i_grid+1) - nuc%energy(i_grid))
     f = (E - mic_energy(E_idx))/(mic_energy(E_idx+1) - mic_energy(E_idx))
+
+    print *, "E(idx):", mic_energy(E_idx)
+    print *, "f:", f
 !
 !    mymicro_xs(i_nuclide) % index_grid    = i_grid
 !    mymicro_xs(i_nuclide) % interp_factor = f

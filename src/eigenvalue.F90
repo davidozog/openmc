@@ -44,6 +44,7 @@ contains
 
     type(Particle) :: p
     integer        :: i_work
+    integer :: alloc_err     ! fission bank allocation error code
     integer :: alloc_err_xs  ! cross section allocation error code
 
     if (master) call header("K EIGENVALUE SIMULATION", level=1)
@@ -75,6 +76,7 @@ contains
     allocate(master_xs_bank(work), STAT=alloc_err_xs)
 #else
     allocate(fission_bank(3*work), STAT=alloc_err)
+    allocate(master_xs_bank(work), STAT=alloc_err_xs)
     allocate(xs_bank(work), STAT=alloc_err_xs)
 #endif
 
@@ -101,9 +103,6 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp  parallel do schedule(static) firstprivate(p)    &
-!$omp& reduction(+:tally_tracklength,tally_collision, &
-!$omp& tally_leakage,tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
@@ -114,9 +113,12 @@ contains
           call transport(p)
 
         end do PARTICLE_LOOP
-!$omp end parallel do
 
+#ifdef _OPENMP
         call join_xs_bank_from_threads()
+#else 
+        call join_xs_bank()
+#endif
         call calculate_bank_xs(master_xs_bank)
 !       call mic_func()
 
@@ -962,6 +964,22 @@ contains
 !$omp end parallel
 
   end subroutine join_xs_bank_from_threads
+
+#else
+
+subroutine join_xs_bank()
+
+  integer :: total_xs      ! total number of cross section bank sites
+  integer :: i             ! loop index for threads
+
+  ! Initialize the total number of fission bank sites
+  total_xs = 0
+
+  master_xs_bank(1:n_bank_xs) = xs_bank(1:n_bank_xs)
+  total_xs = n_bank_xs
+
+end subroutine join_xs_bank
+
 #endif
 
 end module eigenvalue
