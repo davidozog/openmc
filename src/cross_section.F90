@@ -432,7 +432,8 @@ contains
 !   print *, "E_idx:", mic_grid_index(i_grid)
 !   print *, "mic_n_nuclides_total:", mic_n_nuclides_total
 
-    E_idx = mic_grid_index(i_grid)
+    E_idx = mic_grid_index((i_nuclide-1)*n_grid + i_grid)
+    E_idx = nuc % base_idx + E_idx
 
 !NOTE: ONLY UNIONIZED GRID SUPPORTED:
     ! Determine index on nuclide energy grid

@@ -918,7 +918,7 @@ contains
   subroutine mic_initialize()
     
     integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
-    type(Nuclide), pointer, save :: nuc => null()
+    type(Nuclide), pointer :: nuc => null()
 
     message = "Initializing MIC data structures..."
     call write_message(6)
@@ -928,7 +928,7 @@ contains
     allocate(mic_n_nuclides(n_materials))
     allocate(mic_nuclides(n_nuclides_total))
 
-    mic_nuclides(1) % base_idx = 1 
+    mic_nuclides(1) % base_idx = 0
     i_nuclide = 0
     n_grid_total = 0
 
@@ -968,7 +968,7 @@ contains
 
     print *, "n_grid_total:", n_grid_total
 
-    allocate(mic_grid_index(n_grid_total))
+    allocate(mic_grid_index(n_grid*n_nuclides_total))
     allocate(mic_energy(n_grid_total))
     allocate(mic_total(n_grid_total))                 ! total cross section
     allocate(mic_elastic(n_grid_total))               ! elastic scattering
@@ -993,8 +993,8 @@ contains
 !       mic_heating(jdx) = nuc % heating(j)
       end do
       
-      do j = 1, ngrd
-        mic_grid_index(j + n_grid_total) = nuc % grid_index(j)
+      do j = 1, n_grid
+        mic_grid_index(j + n_grid*(i-1)) = nuc % grid_index(j)
       end do
 
       n_grid_total = n_grid_total + ngrd
