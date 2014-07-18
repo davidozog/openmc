@@ -103,6 +103,9 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
+!$omp  parallel do schedule(static) firstprivate(p)    &
+!$omp& reduction(+:tally_tracklength,tally_collision, &
+!$omp& tally_leakage,tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
@@ -113,6 +116,7 @@ contains
           call transport(p)
 
         end do PARTICLE_LOOP
+!$omp end parallel do
 
 #ifdef _OPENMP
         call join_xs_bank_from_threads()
@@ -960,10 +964,6 @@ contains
     else
       n_bank_xs = 0
     end if
-
-    do i = 1, total_xs
-      print *, "master_xs_bank%id:", master_xs_bank % id
-    end do
 
 !$omp end parallel
 

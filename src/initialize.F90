@@ -24,7 +24,7 @@ module initialize
   use mic,              only: mic_materials, mic_n_nuclides, mic_grid_index,   & 
                               mic_energy, mic_total, mic_elastic, mic_fission, &
                               mic_nu_fission, mic_absorption, mic_heating,     &
-                              mic_nuclides, mic_n_nuclides_total
+                              mic_nuclides, mic_n_nuclides_total, mic_n_grid
 
 #ifdef MPI
   use mpi
@@ -924,6 +924,7 @@ contains
     call write_message(6)
 
     mic_n_nuclides_total = n_nuclides_total
+    mic_n_grid = n_grid
     allocate(mic_materials(n_materials))
     allocate(mic_n_nuclides(n_materials))
     allocate(mic_nuclides(n_nuclides_total))

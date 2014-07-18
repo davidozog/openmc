@@ -12,7 +12,7 @@ module cross_section
   use mic,             only: MICNuclide, mic_materials, mic_n_nuclides_total,  &
                              mic_nuclides, mic_energy, mic_grid_index,         &
                              mic_total, mic_elastic, mic_absorption,           &
-                             mic_fission, mic_nu_fission
+                             mic_fission, mic_nu_fission, mic_n_grid
   use omp_lib
 
   implicit none
@@ -113,7 +113,8 @@ contains
 !dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs)), &
 !dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index, &
 !dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
-!dir$           mic_nu_fission, mic_n_nuclides_total, mymaterial_xs) 
+!dir$           mic_nu_fission, mic_n_nuclides_total, mymaterial_xs,     &
+!dir$           mic_n_grid) 
 !$omp parallel do firstprivate(mymaterial_xs) &
 !$omp             private(mymicro_xs,atom_density,i_nuclide,i_sab)
     do pp = 1, total_xs
@@ -194,8 +195,6 @@ contains
       print *, "micro_xs:", mymicro_xs(i_nuclide)
       end do NUCLIDES_IN_MATERIAL_LOOP
       
-      stop
-
     end do 
 !dir$ end offload 
 
@@ -432,8 +431,15 @@ contains
 !   print *, "E_idx:", mic_grid_index(i_grid)
 !   print *, "mic_n_nuclides_total:", mic_n_nuclides_total
 
-    E_idx = mic_grid_index((i_nuclide-1)*n_grid + i_grid)
+    E_idx = mic_grid_index((i_nuclide-1)*mic_n_grid + i_grid)
+    print *, "i_grid:", i_grid
+    print *, "eidx:", E_idx
     E_idx = nuc % base_idx + E_idx
+    print *, "E_idx:", E_idx
+    print *, "mic_n_grid:", mic_n_grid
+    print *, "i_nuclide:", i_nuclide
+
+
 
 !NOTE: ONLY UNIONIZED GRID SUPPORTED:
     ! Determine index on nuclide energy grid
