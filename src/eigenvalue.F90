@@ -961,6 +961,10 @@ contains
       n_bank_xs = 0
     end if
 
+    do i = 1, total_xs
+      print *, "master_xs_bank%id:", master_xs_bank % id
+    end do
+
 !$omp end parallel
 
   end subroutine join_xs_bank_from_threads
