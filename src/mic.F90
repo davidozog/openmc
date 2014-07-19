@@ -25,18 +25,19 @@ module mic
   type(MICNuclide), allocatable, target :: mic_nuclides(:)
   integer, save ::  mic_n_nuclides_total 
   integer, save ::  mic_n_grid
+  integer, save ::  mic_work
   public mic_materials, mic_n_nuclides, mic_grid_index, mic_energy, &
          mic_total, mic_elastic, mic_fission, mic_nu_fission, mic_absorption, &
-         mic_heating, mic_nuclides, mic_n_nuclides_total, mic_n_grid
+         mic_heating, mic_nuclides, mic_n_nuclides_total, mic_n_grid, mic_work
 
 !dir$ attributes offload:mic :: mic_materials, mic_n_nuclides, mic_grid_index, &
 !dir$    mic_energy, mic_total, mic_elastic, mic_fission, mic_nu_fission,      &
 !dir$    mic_absorption, mic_heating, mic_nuclides, mic_n_nuclides_total,      &
-!dir$    mic_n_grid
+!dir$    mic_n_grid, mic_work
 !dir$ attributes align:64 :: mic_materials, mic_n_nuclides, mic_grid_index,    &
 !dir$    mic_energy, mic_total, mic_elastic, mic_fission, mic_nu_fission,      &
 !dir$    mic_absorption, mic_heating, mic_nuclides, mic_n_nuclides_total,      &
-!dir$    mic_n_grid
+!dir$    mic_n_grid, mic_work
 
 contains 
 

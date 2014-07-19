@@ -12,7 +12,7 @@ module cross_section
   use mic,             only: MICNuclide, mic_materials, mic_n_nuclides_total,  &
                              mic_nuclides, mic_energy, mic_grid_index,         &
                              mic_total, mic_elastic, mic_absorption,           &
-                             mic_fission, mic_nu_fission, mic_n_grid
+                             mic_fission, mic_nu_fission, mic_n_grid, mic_work
   use omp_lib
 
   implicit none
@@ -77,36 +77,48 @@ contains
 
     type(BankedParticle), intent(inout) :: master_xs_bank(:)
 !dir$ attributes align : 64 :: mymicro_xs, mymaterial_xs
-    type(NuclideMicroXS) :: mymicro_xs(n_nuclides_total)  ! Cache for each nuclide
-    type(MaterialMacroXS) :: mymaterial_xs  ! Cache for each nuclide
+    type(NuclideMicroXS) :: mymicro_xs(n_nuclides_total, work)  ! Cache for each nuclide
+    type(MaterialMacroXS) :: mymaterial_xs(work)  ! Cache for each nuclide
     integer :: i             ! loop index over nuclides
+    integer :: p_id          ! particle ID 
     integer :: i_nuclide     ! index into nuclides array
     integer :: i_sab         ! index into sab_tables array
     integer :: j             ! index in mat % i_sab_nuclides
+    integer :: n             ! index for number of nuclides in particle's mat
     integer :: pp            ! particle index
     integer :: total_xs      ! number of particles in bank
     real(8) :: atom_density  ! atom density of a nuclide
     logical :: check_sab     ! should we check for S(a,b) table?
     type(Material), pointer, save :: mat => null() ! current material
+
+    type(MICNuclide), pointer :: nuc
+    integer :: E_idx         ! index into grid_index
+    integer :: i_grid        ! index on nuclide energy grid
+    real(8) :: E             ! energy
+    real(8) :: f             ! interp factor on nuclide energy grid
 !$omp threadprivate(mat)
 
     ! Set all material macroscopic cross sections to zero
-    mymaterial_xs % total      = ZERO
-    mymaterial_xs % elastic    = ZERO
-    mymaterial_xs % absorption = ZERO
-    mymaterial_xs % fission    = ZERO
-    mymaterial_xs % nu_fission = ZERO
-    mymaterial_xs % kappa_fission  = ZERO
+    do i = 1, work
+      mymaterial_xs(i) % total      = ZERO
+      mymaterial_xs(i) % elastic    = ZERO
+      mymaterial_xs(i) % absorption = ZERO
+      mymaterial_xs(i) % fission    = ZERO
+      mymaterial_xs(i) % nu_fission = ZERO
+      mymaterial_xs(i) % kappa_fission  = ZERO
+    end do
 
     total_xs = n_bank_xs
 !    print *, "n_grid:", n_grid
 !    print *, "total_xs is ", total_xs
 !    print *, "bank:", xs_bank
 
-     do i=1, n_nuclides_total
-       mymicro_xs(i) = micro_xs(i)
-!      print *, "MYMICRO-host:", mymicro_xs(i)
-     end do
+    do i = 1, work
+      do j = 1, n_nuclides_total
+        mymicro_xs(j, i) = micro_xs(j)
+!     print *, "MYMICRO-host:", mymicro_xs(i)
+      end do
+    end do
 
     print *, "DOING:", total_xs
 
@@ -114,21 +126,21 @@ contains
 !dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index, &
 !dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
 !dir$           mic_nu_fission, mic_n_nuclides_total, mymaterial_xs,     &
-!dir$           mic_n_grid) 
-!$omp parallel do firstprivate(mymaterial_xs) &
-!$omp             private(mymicro_xs,atom_density,i_nuclide,i_sab)
+!dir$           mic_n_grid, mic_work, nuc) 
+!$omp parallel do private(atom_density,i_nuclide,i_sab, nuc)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
 
       j = 1
+      n = master_xs_bank(pp) % n_nuclides
 
 !   do i=1, mic_n_nuclides_total
 !     print *, "MYMIRCRO-mic:", mymicro_xs(i)
 !   end do
 
 !NOTE: might need a "simd" pragma here
-!dir$ ivdep
-      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, master_xs_bank(pp) % n_nuclides
+!dir$ simd
+      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, n
         ! ======================================================================
         ! CHECK FOR S(A,B) TABLE
         i_sab = 0
@@ -151,54 +163,134 @@ contains
 !          end if
 !        end if
 
+        p_id = master_xs_bank(pp) % id
+
         i_nuclide = master_xs_bank(pp) % nuclides(i)
         ! Calculate microscopic cross section for this nuclide
-        if (master_xs_bank(pp) % E /= mymicro_xs(i_nuclide) % last_E) then
-          call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
-              mymicro_xs, master_xs_bank(pp) % energy_index)
-        else if (i_sab /= mymicro_xs(i_nuclide) % last_index_sab) then
-          call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
-              mymicro_xs, master_xs_bank(pp) % energy_index)
-        end if
+!       if (master_xs_bank(pp) % E /= mymicro_xs(i_nuclide, p_id) % last_E) then
+!         call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
+!             mymicro_xs, master_xs_bank(pp) % energy_index, p_id)
+!       else if (i_sab /= mymicro_xs(i_nuclide, p_id) % last_index_sab) then
+!           call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
+!               mymicro_xs, master_xs_bank(pp) % energy_index, p_id)
+!       end if
+
+    nuc => mic_nuclides(i_nuclide)
+    i_grid = master_xs_bank(pp) % energy_index
+    E = master_xs_bank(pp) % E
+    !E_idx = mic_grid_index((i_nuclide-1)*mic_n_grid + i_grid)
+    E_idx = nuc % base_idx + mic_grid_index((i_nuclide-1)*mic_n_grid + i_grid)
+
+    ! check for rare case where two energy points are the same
+    !if (mic_energy(E_idx) == mic_energy(E_idx+1)) E_idx = E_idx + 1
+    f = (E - mic_energy(E_idx))/(mic_energy(E_idx+1) - mic_energy(E_idx))
+
+    mymicro_xs(i_nuclide, p_id) % index_grid    = E_idx
+    mymicro_xs(i_nuclide, p_id) % interp_factor = f
+
+    ! Initialize sab treatment to false
+    mymicro_xs(i_nuclide, p_id) % index_sab   = NONE
+    mymicro_xs(i_nuclide, p_id) % elastic_sab = ZERO
+    mymicro_xs(i_nuclide, p_id) % use_ptable  = .false.
+
+    ! Initialize nuclide cross-sections to zero
+    mymicro_xs(i_nuclide, p_id) % fission    = ZERO
+    mymicro_xs(i_nuclide, p_id) % nu_fission = ZERO
+    mymicro_xs(i_nuclide, p_id) % kappa_fission  = ZERO
+
+    ! Calculate microscopic nuclide total cross section
+    mymicro_xs(i_nuclide, p_id) % total = (ONE - f) * mic_total(E_idx) &
+          + f * mic_total(E_idx+1)
+
+    ! Calculate microscopic nuclide total cross section
+    mymicro_xs(i_nuclide, p_id) % elastic = (ONE - f) * mic_elastic(E_idx) &
+          + f * mic_elastic(E_idx+1)
+
+    ! Calculate microscopic nuclide absorption cross section
+    mymicro_xs(i_nuclide, p_id) % absorption = (ONE - f) * mic_absorption( &
+          E_idx) + f * mic_absorption(E_idx+1)
+
+    if (nuc % fissionable) then
+      ! Calculate microscopic nuclide total cross section
+      mymicro_xs(i_nuclide, p_id) % fission = (ONE - f) * mic_fission(E_idx) &
+           + f * mic_fission(E_idx+1)
+
+      ! Calculate microscopic nuclide nu-fission cross section
+      mymicro_xs(i_nuclide, p_id) % nu_fission = (ONE - f) * mic_nu_fission( &
+           E_idx) + f * mic_nu_fission(E_idx+1)
+          
+      ! Calculate microscopic nuclide kappa-fission cross section
+      ! The ENDF standard (ENDF-102) states that MT 18 stores
+      ! the fission energy as the Q_value (fission(1))
+      mymicro_xs(i_nuclide, p_id) % kappa_fission = &
+           nuc % Q_value * mymicro_xs(i_nuclide, p_id) % fission
+    end if
+
+    ! If there is S(a,b) data for this nuclide, we need to do a few
+    ! things. Since the total cross section was based on non-S(a,b) data, we
+    ! need to correct it by subtracting the non-S(a,b) elastic cross section and
+    ! then add back in the calculated S(a,b) elastic+inelastic cross section.
+
+    if (i_sab > 0) then
+      print *, "SAB NOT IMPLEMENTED YET."
+      stop 1
+      !call calculate_sab_xs(i_nuclide, i_sab, E)
+    end if
+
+    ! if the particle is in the unresolved resonance range and there are
+    ! probability tables, we need to determine cross sections from the table
+ 
+    !NOTE: URR XS NOT SUPPORTED YET ON MIC
+    !   if (urr_ptables_on .and. nuc % urr_present) then
+    !   if (urr_ptables_on .and. nuc % urr_present) then
+    !     if (E > nuc % urr_data % energy(1) .and. &
+    !          E < nuc % urr_data % energy(nuc % urr_data % n_energy)) then
+    !       call calculate_urr_xs(i_nuclide, E)
+    !     end if
+    !   end if
+
+    mymicro_xs(i_nuclide, p_id) % last_E = E
+    mymicro_xs(i_nuclide, p_id) % last_index_sab = i_sab
 
         ! Copy atom density of nuclide in material
         atom_density = master_xs_bank(pp) % atom_density(i)
 
         ! Add contributions to material macroscopic total cross section
-        mymaterial_xs % total = mymaterial_xs % total + &
-             atom_density * mymicro_xs(i_nuclide) % total
+        mymaterial_xs(p_id) % total = mymaterial_xs(p_id) % total + &
+             atom_density * mymicro_xs(i_nuclide, p_id) % total
 
         ! Add contributions to material macroscopic scattering cross section
-        mymaterial_xs % elastic = mymaterial_xs % elastic + &
-             atom_density * mymicro_xs(i_nuclide) % elastic
+        mymaterial_xs(p_id) % elastic = mymaterial_xs(p_id) % elastic + &
+             atom_density * mymicro_xs(i_nuclide, p_id) % elastic
 
         ! Add contributions to material macroscopic absorption cross section
-        mymaterial_xs % absorption = mymaterial_xs % absorption + & 
-             atom_density * mymicro_xs(i_nuclide) % absorption
+        mymaterial_xs(p_id) % absorption = mymaterial_xs(p_id) % absorption + & 
+             atom_density * mymicro_xs(i_nuclide, p_id) % absorption
 
         ! Add contributions to material macroscopic fission cross section
-        mymaterial_xs % fission = mymaterial_xs % fission + &
-             atom_density * mymicro_xs(i_nuclide) % fission
+        mymaterial_xs(p_id) % fission = mymaterial_xs(p_id) % fission + &
+             atom_density * mymicro_xs(i_nuclide, p_id) % fission
 
         ! Add contributions to material macroscopic nu-fission cross section
-        mymaterial_xs % nu_fission = mymaterial_xs % nu_fission + &
-             atom_density * mymicro_xs(i_nuclide) % nu_fission
+        mymaterial_xs(p_id) % nu_fission = mymaterial_xs(p_id) % nu_fission + &
+             atom_density * mymicro_xs(i_nuclide, p_id) % nu_fission
              
         ! Add contributions to material macroscopic energy release from fission
-        mymaterial_xs % kappa_fission = mymaterial_xs % kappa_fission + &
-             atom_density * mymicro_xs(i_nuclide) % kappa_fission
+        mymaterial_xs(p_id) % kappa_fission = mymaterial_xs(p_id) % kappa_fission + &
+             atom_density * mymicro_xs(i_nuclide, p_id) % kappa_fission
 
-!      print *, "MYMIRCRO-after-call:", mymicro_xs(i_nuclide) % total, &
+!      print *, "MYMIRCRO-after-call:", mymicro_xs(i_nuclide, p_id) % total, &
 !      "i_nuclide:", i_nuclide
 
-      print *, "particle:", master_xs_bank(pp) % id, "nuc", i, "material_xs:", mymaterial_xs
-      print *, "micro_xs:", mymicro_xs(i_nuclide)
-      end do NUCLIDES_IN_MATERIAL_LOOP
+!       print *, "particle:", master_xs_bank(pp) % id, "nuc", i, &
+!                "material_xs:", mymaterial_xs(p_id)
+!      print *, "micro_xs:", mymicro_xs(i_nuclide, p_id)
       
+      end do NUCLIDES_IN_MATERIAL_LOOP
+      print *, "pp=", pp, "i=", i
+
     end do 
 !dir$ end offload 
-
-
 
 !    do pp = 1, total_xs
 !
@@ -409,12 +501,13 @@ contains
 !===============================================================================
 
 !DIR$ attributes offload:mic :: calculate_nuclide_xs
-  subroutine calculate_nuclide_xs(i_nuclide, i_sab, E, mymicro_xs, i_grid)
+  subroutine calculate_nuclide_xs(i_nuclide, i_sab, E, mymicro_xs, i_grid, p_id)
 
     integer, intent(in) :: i_nuclide ! index into nuclides array
     integer, intent(in) :: i_sab     ! index into sab_tables array
     real(8), intent(in) :: E         ! energy
-    type(NuclideMicroXS), intent(inout) :: mymicro_xs(mic_n_nuclides_total)  ! Cache for each nuclide
+    type(NuclideMicroXS), intent(inout) :: mymicro_xs(mic_n_nuclides_total, mic_work)  ! Cache for each nuclide
+    integer, intent(in) :: p_id      ! particle id
 
     integer, intent(in) :: i_grid ! index on nuclide energy grid
     real(8) :: f      ! interp factor on nuclide energy grid
@@ -479,55 +572,55 @@ contains
 !
 !    mymicro_xs(i_nuclide) % index_grid    = i_grid
 !    mymicro_xs(i_nuclide) % interp_factor = f
-     mymicro_xs(i_nuclide) % index_grid    = E_idx
-     mymicro_xs(i_nuclide) % interp_factor = f
+     mymicro_xs(i_nuclide, p_id) % index_grid    = E_idx
+     mymicro_xs(i_nuclide, p_id) % interp_factor = f
 !
      ! Initialize sab treatment to false
 !    mymicro_xs(i_nuclide) % index_sab   = NONE
 !    mymicro_xs(i_nuclide) % elastic_sab = ZERO
 !    mymicro_xs(i_nuclide) % use_ptable  = .false.
-     mymicro_xs(i_nuclide) % index_sab   = NONE
-     mymicro_xs(i_nuclide) % elastic_sab = ZERO
-     mymicro_xs(i_nuclide) % use_ptable  = .false.
+     mymicro_xs(i_nuclide, p_id) % index_sab   = NONE
+     mymicro_xs(i_nuclide, p_id) % elastic_sab = ZERO
+     mymicro_xs(i_nuclide, p_id) % use_ptable  = .false.
 !
 !    ! Initialize nuclide cross-sections to zero
 !    mymicro_xs(i_nuclide) % fission    = ZERO
 !    mymicro_xs(i_nuclide) % nu_fission = ZERO
 !    mymicro_xs(i_nuclide) % kappa_fission  = ZERO
-     mymicro_xs(i_nuclide) % fission    = ZERO
-     mymicro_xs(i_nuclide) % nu_fission = ZERO
-     mymicro_xs(i_nuclide) % kappa_fission  = ZERO
+     mymicro_xs(i_nuclide, p_id) % fission    = ZERO
+     mymicro_xs(i_nuclide, p_id) % nu_fission = ZERO
+     mymicro_xs(i_nuclide, p_id) % kappa_fission  = ZERO
 
 !
 !    ! Calculate microscopic nuclide total cross section
 !    mymicro_xs(i_nuclide) % total = (ONE - f) * nuc % total(i_grid) &
 !         + f * nuc % total(i_grid+1)
-     mymicro_xs(i_nuclide) % total = (ONE - f) * mic_total(E_idx) &
+     mymicro_xs(i_nuclide, p_id) % total = (ONE - f) * mic_total(E_idx) &
           + f * mic_total(E_idx+1)
 !
 !    ! Calculate microscopic nuclide total cross section
 !    mymicro_xs(i_nuclide) % elastic = (ONE - f) * nuc % elastic(i_grid) &
 !         + f * nuc % elastic(i_grid+1)
-     mymicro_xs(i_nuclide) % elastic = (ONE - f) * mic_elastic(E_idx) &
+     mymicro_xs(i_nuclide, p_id) % elastic = (ONE - f) * mic_elastic(E_idx) &
           + f * mic_elastic(E_idx+1)
 !
 !    ! Calculate microscopic nuclide absorption cross section
 !    mymicro_xs(i_nuclide) % absorption = (ONE - f) * nuc % absorption( &
 !         i_grid) + f * nuc % absorption(i_grid+1)
-     mymicro_xs(i_nuclide) % absorption = (ONE - f) * mic_absorption( &
+     mymicro_xs(i_nuclide, p_id) % absorption = (ONE - f) * mic_absorption( &
           E_idx) + f * mic_absorption(E_idx+1)
 !
      if (nuc % fissionable) then
 !      ! Calculate microscopic nuclide total cross section
 !      mymicro_xs(i_nuclide) % fission = (ONE - f) * nuc % fission(i_grid) &
 !           + f * nuc % fission(i_grid+1)
-       mymicro_xs(i_nuclide) % fission = (ONE - f) * mic_fission(E_idx) &
+       mymicro_xs(i_nuclide, p_id) % fission = (ONE - f) * mic_fission(E_idx) &
             + f * mic_fission(E_idx+1)
 !
 !      ! Calculate microscopic nuclide nu-fission cross section
 !      mymicro_xs(i_nuclide) % nu_fission = (ONE - f) * nuc % nu_fission( &
 !           i_grid) + f * nuc % nu_fission(i_grid+1)
-       mymicro_xs(i_nuclide) % nu_fission = (ONE - f) * mic_nu_fission( &
+       mymicro_xs(i_nuclide, p_id) % nu_fission = (ONE - f) * mic_nu_fission( &
             E_idx) + f * mic_nu_fission(E_idx+1)
 !           
 !      ! Calculate microscopic nuclide kappa-fission cross section
@@ -536,8 +629,8 @@ contains
 !      mymicro_xs(i_nuclide) % kappa_fission = &
 !           nuc % reactions(nuc % index_fission(1)) % Q_value * &
 !           mymicro_xs(i_nuclide) % fission
-       mymicro_xs(i_nuclide) % kappa_fission = &
-            nuc % Q_value * mymicro_xs(i_nuclide) % fission
+       mymicro_xs(i_nuclide, p_id) % kappa_fission = &
+            nuc % Q_value * mymicro_xs(i_nuclide, p_id) % fission
      end if
 !
 !    ! If there is S(a,b) data for this nuclide, we need to do a few
@@ -565,8 +658,8 @@ contains
 !
 !    mymicro_xs(i_nuclide) % last_E = E
 !    mymicro_xs(i_nuclide) % last_index_sab = i_sab
-     mymicro_xs(i_nuclide) % last_E = E
-     mymicro_xs(i_nuclide) % last_index_sab = i_sab
+     mymicro_xs(i_nuclide, p_id) % last_E = E
+     mymicro_xs(i_nuclide, p_id) % last_index_sab = i_sab
 
   end subroutine calculate_nuclide_xs
 
