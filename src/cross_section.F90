@@ -126,7 +126,7 @@ contains
 !dir$           mic_nu_fission, mic_n_nuclides_total, mic_n_grid,        &
 !dir$           mic_work, nuc)                                           &
 !dir$        inout(mymaterial_xs)
-!$omp parallel do private(atom_density,i_nuclide,i_sab, nuc, p_id, i_grid, E, E_idx, f, i)
+!$omp parallel do simd private(atom_density,i_nuclide,i_sab, nuc, p_id, i_grid, E, E_idx, f)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
 
