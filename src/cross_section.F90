@@ -96,6 +96,8 @@ contains
     real(8) :: E             ! energy
     real(8) :: f             ! interp factor on nuclide energy grid
 
+    print *, "calculate_bank_xs() ..."
+
     ! Set all material macroscopic cross sections to zero
     do i = 1, work
       mymaterial_xs(i) % total      = ZERO
@@ -125,7 +127,7 @@ contains
 !dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
 !dir$           mic_nu_fission, mic_n_nuclides_total, mic_n_grid,        &
 !dir$           mic_work, nuc)                                           &
-!dir$        inout(mymaterial_xs)
+!dir$        inout(mymaterial_xs, mymicro_xs)
 !$omp parallel do simd private(atom_density,i_nuclide,i_sab, nuc, p_id, i_grid, E, E_idx, f)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
@@ -231,7 +233,7 @@ contains
     ! then add back in the calculated S(a,b) elastic+inelastic cross section.
 
     if (i_sab > 0) then
-      print *, "SAB NOT IMPLEMENTED YET."
+!     print *, "SAB NOT IMPLEMENTED YET."
       stop 1
       !call calculate_sab_xs(i_nuclide, i_sab, E)
     end if
@@ -286,7 +288,7 @@ contains
 !      print *, "micro_xs:", mymicro_xs(i_nuclide, p_id)
       
       end do NUCLIDES_IN_MATERIAL_LOOP
-      print *, "pp=", pp, "i=", i
+!     print *, "pp=", pp, "i=", i
 
     end do 
 !dir$ end offload 

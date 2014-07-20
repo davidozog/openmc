@@ -1,5 +1,8 @@
 module mic
   
+! TODO:
+! use ace_header, only:NuclideMicroXS, MaterialMacroXS
+
   implicit none
 
   type MICNuclide
@@ -23,6 +26,11 @@ module mic
   real(8), allocatable, save :: mic_absorption(:)
   real(8), allocatable, save :: mic_heating(:)
   type(MICNuclide), allocatable, target :: mic_nuclides(:)
+
+!  TODO:
+!  type(NuclideMicroXS), allocatable :: micro_xs(:)  ! Cache for each nuclide
+!  type(MaterialMacroXS)             :: material_xs  ! Cache for current material
+
   integer, save ::  mic_n_nuclides_total 
   integer, save ::  mic_n_grid
   integer, save ::  mic_work
