@@ -84,7 +84,6 @@ contains
     integer :: i_nuclide     ! index into nuclides array
     integer :: i_sab         ! index into sab_tables array
     integer :: j             ! index in mat % i_sab_nuclides
-    integer :: n             ! index for number of nuclides in particle's mat
     integer :: pp            ! particle index
     integer :: total_xs      ! number of particles in bank
     real(8) :: atom_density  ! atom density of a nuclide
@@ -96,7 +95,6 @@ contains
     integer :: i_grid        ! index on nuclide energy grid
     real(8) :: E             ! energy
     real(8) :: f             ! interp factor on nuclide energy grid
-!$omp threadprivate(mat)
 
     ! Set all material macroscopic cross sections to zero
     do i = 1, work
@@ -125,22 +123,25 @@ contains
 !dir$ offload begin target(mic:0) in(master_xs_bank : LENGTH(total_xs)), &
 !dir$        in(mic_materials, mic_nuclides, mic_energy, mic_grid_index, &
 !dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
-!dir$           mic_nu_fission, mic_n_nuclides_total, mymaterial_xs,     &
-!dir$           mic_n_grid, mic_work, nuc) 
-!$omp parallel do private(atom_density,i_nuclide,i_sab, nuc)
+!dir$           mic_nu_fission, mic_n_nuclides_total, mic_n_grid,        &
+!dir$           mic_work, nuc)                                           &
+!dir$        inout(mymaterial_xs)
+!$omp parallel do private(atom_density,i_nuclide,i_sab, nuc, p_id, i_grid, E, E_idx, f, i)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
 
+!     write(*,*)'Thread id: ', OMP_GET_THREAD_NUM()
+
       j = 1
-      n = master_xs_bank(pp) % n_nuclides
+      p_id = master_xs_bank(pp) % id
 
 !   do i=1, mic_n_nuclides_total
 !     print *, "MYMIRCRO-mic:", mymicro_xs(i)
 !   end do
 
 !NOTE: might need a "simd" pragma here
-!dir$ simd
-      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, n
+!dir$ ivdep
+      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, master_xs_bank(pp) % n_nuclides
         ! ======================================================================
         ! CHECK FOR S(A,B) TABLE
         i_sab = 0
@@ -162,8 +163,6 @@ contains
 !            if (j > mat % n_sab) check_sab = .false.
 !          end if
 !        end if
-
-        p_id = master_xs_bank(pp) % id
 
         i_nuclide = master_xs_bank(pp) % nuclides(i)
         ! Calculate microscopic cross section for this nuclide
@@ -291,6 +290,11 @@ contains
 
     end do 
 !dir$ end offload 
+
+  print *, "mymaterials for each particle ID:"
+  do i = 1, total_xs
+    print *, i, mymaterial_xs(i)
+  end do
 
 !    do pp = 1, total_xs
 !
