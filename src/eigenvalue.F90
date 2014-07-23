@@ -22,16 +22,15 @@ module eigenvalue
   use tally,        only: synchronize_tallies, setup_active_usertallies, &
                           reset_result
   use tracking,     only: transport
-  use cross_section, only: calculate_bank_xs
+  use cross_section, only: calculate_bank_xs, master_xs_bank
   use mic,          only: mic_func
   use omp_lib
 
   private
-  public :: run_eigenvalue
 
   real(8) :: keff_generation ! Single-generation k on each processor
   real(8) :: k_sum(2) = ZERO ! used to reduce sum and sum_sq
-  type(BankedParticle), allocatable, target :: master_xs_bank(:)
+  public :: run_eigenvalue
 
 contains
 
@@ -68,12 +67,11 @@ contains
     end if
 !$omp end parallel
 
-    allocate(master_xs_bank(work), STAT=alloc_err_xs)
 
     ! init
     n_bank_xs = 0
-
     allocate(master_xs_bank(work), STAT=alloc_err_xs)
+
 #else
     allocate(fission_bank(3*work), STAT=alloc_err)
     allocate(master_xs_bank(work), STAT=alloc_err_xs)
@@ -123,12 +121,13 @@ contains
 #else 
         call join_xs_bank()
 #endif
-        call calculate_bank_xs(master_xs_bank)
+
+        print *, "here..."
+        call calculate_bank_xs()
 !       call mic_func()
 
         ! Accumulate time for transport
         call time_transport % stop()
-
         call finalize_generation()
 
       end do GENERATION_LOOP
@@ -136,6 +135,8 @@ contains
       call finalize_batch()
 
     end do BATCH_LOOP
+
+    print *, "transport time:", time_transport % get_value()
 
     call time_active % stop()
 
@@ -230,11 +231,11 @@ contains
 
     ! Distribute fission bank across processors evenly
     call time_bank % start()
-    call synchronize_bank()
+!   call synchronize_bank()
     call time_bank % stop()
 
     ! Calculate shannon entropy
-    if (entropy_on) call shannon_entropy()
+!   if (entropy_on) call shannon_entropy()
 
     ! Collect results and statistics
     call calculate_generation_keff()
@@ -797,11 +798,14 @@ contains
     S(1) = (n - 1)**2 * S(1)
 
     ! Calculate combined estimate of k-effective
-    k_combined(1) = k_combined(1) / g
+!   k_combined(1) = k_combined(1) / g
+    k_combined(1) = 1.0
+
 
     ! Calculate standard deviation of combined estimate
     g = (n - 1)**2 * g
-    k_combined(2) = sqrt(S(1)/(g*n*(n-3)) * (ONE + n*((S(2) - TWO*S(3))/g)))
+!   k_combined(2) = sqrt(S(1)/(g*n*(n-3)) * (ONE + n*((S(2) - TWO*S(3))/g)))
+    k_combined(2) = 1.0
 
   end subroutine calculate_combined_keff
 

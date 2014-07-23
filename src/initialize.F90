@@ -21,11 +21,7 @@ module initialize
   use string,           only: to_str, str_to_int, starts_with, ends_with
   use tally_header,     only: TallyObject, TallyResult
   use tally_initialize, only: configure_tallies
-  use mic,              only: mic_materials, mic_n_nuclides, mic_grid_index,   & 
-                              mic_energy, mic_total, mic_elastic, mic_fission, &
-                              mic_nu_fission, mic_absorption, mic_heating,     &
-                              mic_nuclides, mic_n_nuclides_total, mic_n_grid,  &
-                              mic_work
+  use mic
 
 #ifdef MPI
   use mpi
@@ -920,6 +916,7 @@ contains
     
     integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
     type(Nuclide), pointer :: nuc => null()
+    integer :: ierr 
 
     message = "Initializing MIC data structures..."
     call write_message(6)
@@ -929,9 +926,16 @@ contains
     mic_work = work
     allocate(mic_materials(n_materials))
     allocate(mic_n_nuclides(n_materials))
-    allocate(mic_nuclides(n_nuclides_total))
 
-    mic_nuclides(1) % base_idx = 0
+    allocate(mic_nuc_base_idx(n_nuclides_total), STAT=ierr)
+    allocate(mic_nuc_Q_value(n_nuclides_total), STAT=ierr)
+    if ( ierr /= 0 ) then
+      write(*,*) 'Oops, mic nuclides failed!'
+    else
+      write(*,*) 'Allocation success'
+    endif
+
+    mic_nuc_base_idx(1) = 0
     i_nuclide = 0
     n_grid_total = 0
 
@@ -942,20 +946,15 @@ contains
     do i = 1, n_nuclides_total
       nuc => nuclides(i)
       ngrd = nuc % n_grid
-      mic_nuclides(i) % n_grid = ngrd
-      mic_nuclides(i) % fissionable = nuc % fissionable
-      mic_nuclides(i) % n_reaction = nuc % n_reaction
-      mic_nuclides(i) % urr = urr_ptables_on .and. nuc % urr_present
       if (i /= n_nuclides_total) then
-        mic_nuclides(i+1) % base_idx = mic_nuclides(i) % base_idx + ngrd
+        mic_nuc_base_idx(i+1) = mic_nuc_base_idx(i) + ngrd
       end if
-      print *, "nuclide:", i, "base_idx:", mic_nuclides(i) % base_idx, &
+      print *, "nuclide:", i, "base_idx:", mic_nuc_base_idx(i), &
                "n_grid:", ngrd, "urr_present:", nuc % urr_present, &
                "n_reaction:", nuc % n_reaction
       if (nuclides(i) % fissionable) then
         print*, "index_fission:", nuc % index_fission(1)
-        mic_nuclides(i) % index_fission(1) = nuc % index_fission(1)
-        mic_nuclides(i) % Q_value = &
+        mic_nuc_Q_value(i) = &
           nuc % reactions (nuc % index_fission(1)) % Q_value
       end if
 
@@ -1005,32 +1004,67 @@ contains
     end do
 
 
-     do i = 1, n_materials
-       if (materials(i) % n_sab > 0) then
-         print *, "SAB NOT SUPPORTED"
-       end if
-!      print *, "i[in]:", i
-!      n_nuclide = materials(i) % n_nuclides
-!      mic_materials(i) = materials(i) % id
-!      mic_n_nuclides(i) = n_nuclide
-!      mic_base_nuclides(i+1) = mic_base_nuclides(i) + n_nuclide
-!      print *, "i[out]:", i
+    do i = 1, n_materials
+      if (materials(i) % n_sab > 0) then
+        print *, "SAB NOT SUPPORTED"
+      end if
+!     print *, "i[in]:", i
+!     n_nuclide = materials(i) % n_nuclides
+!     mic_materials(i) = materials(i) % id
+!     mic_n_nuclides(i) = n_nuclide
+!     mic_base_nuclides(i+1) = mic_base_nuclides(i) + n_nuclide
+!     print *, "i[out]:", i
 !
-!      do j = 1, n_nuclide
-!        print *, "j[in]:", j
-!        mic_nuclides(i_nuclide+j) = nuclides(materials(i) % nuclide(j)) % n_grid
+!     do j = 1, n_nuclide
+!       print *, "j[in]:", j
+!       mic_nuclides(i_nuclide+j) = nuclides(materials(i) % nuclide(j)) % n_grid
 !
-!        ! TODO: create associated energy grids and cross section arrays
-!        ! ...
+!       ! TODO: create associated energy grids and cross section arrays
+!       ! ...
 !
-!        print *, "j[out]:", j
+!       print *, "j[out]:", j
 !
-!      end do
-!      i_nuclide = i_nuclide + n_nuclide
+!     end do
+!     i_nuclide = i_nuclide + n_nuclide
 !
-     end do
+    end do
 !
-!    print *, "TOTAL NUCLIDES:", i_nuclide 
+!   print *, "TOTAL NUCLIDES:", i_nuclide 
+
+    allocate(mic_micro_index_grid(n_nuclides_total, work), STAT=ierr)         
+    allocate(mic_micro_index_temp(n_nuclides_total, work), STAT=ierr)         
+    allocate(mic_micro_last_E(n_nuclides_total, work), STAT=ierr)       
+    allocate(mic_micro_interp_factor(n_nuclides_total, work), STAT=ierr)      
+    allocate(mic_micro_total(n_nuclides_total, work), STAT=ierr)              
+    allocate(mic_micro_elastic(n_nuclides_total, work), STAT=ierr)            
+    allocate(mic_micro_absorption(n_nuclides_total, work), STAT=ierr)         
+    allocate(mic_micro_fission(n_nuclides_total, work), STAT=ierr)            
+    allocate(mic_micro_nu_fission(n_nuclides_total, work), STAT=ierr)         
+    allocate(mic_micro_kappa_fission(n_nuclides_total, work), STAT=ierr)      
+    allocate(mic_micro_index_sab(n_nuclides_total, work), STAT=ierr)          
+    allocate(mic_micro_last_index_sab(n_nuclides_total, work), STAT=ierr) 
+    allocate(mic_micro_elastic_sab(n_nuclides_total, work), STAT=ierr)        
+    allocate(mic_micro_use_ptable(n_nuclides_total, work), STAT=ierr)         
+    if ( ierr /= 0 ) then
+      write(*,*) 'Oops, micro allocation failed!'
+    else
+      write(*,*) 'Allocation success'
+    endif
+
+    mic_micro_last_E = 0.0
+    mic_micro_last_index_sab = 0
+
+    allocate(mic_mat_total(work), STAT=ierr)
+    allocate(mic_mat_elastic(work), STAT=ierr)
+    allocate(mic_mat_absorption(work), STAT=ierr)
+    allocate(mic_mat_fission(work), STAT=ierr)
+    allocate(mic_mat_nu_fission(work), STAT=ierr)
+    allocate(mic_mat_kappa_fission(work), STAT=ierr)
+    if ( ierr /= 0 ) then
+      write(*,*) 'Oops, material allocation failed!'
+    else
+      write(*,*) 'Allocation success'
+    endif
 
   end subroutine mic_initialize
 
