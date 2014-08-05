@@ -22,8 +22,8 @@ module eigenvalue
   use tally,        only: synchronize_tallies, setup_active_usertallies, &
                           reset_result
   use tracking,     only: transport
-  use cross_section, only: calculate_bank_xs, master_xs_bank
-  use mic,          only: mic_func
+  use cross_section, only: calculate_bank_xs
+  use mic
   use omp_lib
 
   private
@@ -57,25 +57,25 @@ contains
 #ifdef _OPENMP
     n_threads = omp_get_max_threads()
 
-!$omp parallel
-    thread_id = omp_get_thread_num()
-    if (thread_id == 0) then
-       ! For MIC, allocate a cross section lookup bank:
-       allocate(xs_bank(work), STAT=alloc_err_xs)
-    else
-       allocate(xs_bank(work/n_threads+1), STAT=alloc_err_xs)
-    end if
-!$omp end parallel
+!!$omp parallel
+!    thread_id = omp_get_thread_num()
+!    if (thread_id == 0) then
+!       ! For MIC, allocate a cross section lookup bank:
+!       allocate(xs_bank(work), STAT=alloc_err_xs)
+!    else
+!       allocate(xs_bank(work/n_threads+1), STAT=alloc_err_xs)
+!    end if
+!!$omp end parallel
 
 
     ! init
     n_bank_xs = 0
-    allocate(master_xs_bank(work), STAT=alloc_err_xs)
+!   allocate(master_xs_bank(work), STAT=alloc_err_xs)
 
 #else
     allocate(fission_bank(3*work), STAT=alloc_err)
-    allocate(master_xs_bank(work), STAT=alloc_err_xs)
-    allocate(xs_bank(work), STAT=alloc_err_xs)
+!   allocate(master_xs_bank(work), STAT=alloc_err_xs)
+!   allocate(xs_bank(work), STAT=alloc_err_xs)
 #endif
 
     ! ==========================================================================
@@ -122,12 +122,13 @@ contains
         call join_xs_bank()
 #endif
 
-        print *, "here..."
-        call calculate_bank_xs()
-!       call mic_func()
-
         ! Accumulate time for transport
         call time_transport % stop()
+
+        print *, "transport time:", time_transport % get_value()
+
+        call calculate_bank_xs()
+
         call finalize_generation()
 
       end do GENERATION_LOOP
@@ -135,8 +136,6 @@ contains
       call finalize_batch()
 
     end do BATCH_LOOP
-
-    print *, "transport time:", time_transport % get_value()
 
     call time_active % stop()
 
@@ -951,7 +950,15 @@ contains
 !$omp do ordered schedule(static)
     do i = 1, n_threads
 !$omp ordered
-      master_xs_bank(total_xs+1:total_xs+n_bank_xs) = xs_bank(1:n_bank_xs)
+      bp_id(total_xs+1:total_xs+n_bank_xs) = bp_tp_id(1:n_bank_xs)
+      bp_type(total_xs+1:total_xs+n_bank_xs) = bp_tp_type(1:n_bank_xs)
+      bp_material(total_xs+1:total_xs+n_bank_xs) = bp_tp_material(1:n_bank_xs)
+      bp_E(total_xs+1:total_xs+n_bank_xs) = bp_tp_E(1:n_bank_xs)
+      bp_energy_index(total_xs+1:total_xs+n_bank_xs) = bp_tp_energy_index(1:n_bank_xs)
+      bp_check_sab(total_xs+1:total_xs+n_bank_xs) = bp_tp_check_sab(1:n_bank_xs)
+      bp_n_nuclides(total_xs+1:total_xs+n_bank_xs) = bp_tp_n_nuclides(1:n_bank_xs)
+      bp_nuclides(:, total_xs+1:total_xs+n_bank_xs) = bp_tp_nuclides(:, 1:n_bank_xs)
+      bp_atom_density(:, total_xs+1:total_xs+n_bank_xs) = bp_tp_atom_density(:, 1:n_bank_xs)
       total_xs = total_xs + n_bank_xs
 !$omp end ordered
     end do
@@ -963,7 +970,15 @@ contains
     ! Now copy the shared fission bank sites back to the master thread's copy.
     if (thread_id == 0) then
       n_bank_xs = total_xs
-      xs_bank(1:n_bank_xs) = master_xs_bank(1:n_bank_xs)
+      bp_tp_id(1:n_bank_xs) = bp_id(1:n_bank_xs)
+      bp_tp_type(1:n_bank_xs) = bp_type(1:n_bank_xs)
+      bp_tp_material(1:n_bank_xs) = bp_material(1:n_bank_xs)
+      bp_tp_E(1:n_bank_xs) = bp_E(1:n_bank_xs)
+      bp_tp_energy_index(1:n_bank_xs) = bp_energy_index(1:n_bank_xs)
+      bp_tp_check_sab(1:n_bank_xs) = bp_check_sab(1:n_bank_xs)
+      bp_tp_n_nuclides(1:n_bank_xs) = bp_n_nuclides(1:n_bank_xs)
+      bp_tp_nuclides(:, 1:n_bank_xs) = bp_nuclides(:, 1:n_bank_xs)
+      bp_tp_atom_density(:, 1:n_bank_xs) = bp_atom_density(:, 1:n_bank_xs)
       !print *, "xs:", xs_bank
     else
       n_bank_xs = 0

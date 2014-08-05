@@ -84,24 +84,6 @@ module particle_header
     procedure :: clear => clear_particle
   end type Particle
 
-!===============================================================================
-! BANKEDPARTICLE constains the necessary state variables of a particle that
-! needs to performance cross section lookups (for vectorization purposes)
-!===============================================================================
-
-  type BankedParticle
-    ! Basic data
-    integer(8) :: id                  ! Unique ID
-    integer    :: type                ! Particle type (n, p, e, etc)
-    integer    :: material            ! index for current material
-    real(8)    :: E                   ! energy
-    integer    :: energy_index        ! unionized energy index
-    logical    :: check_sab           ! whether this material has S(a,b) tables
-    integer    :: n_nuclides          ! number of nuclides
-    integer    :: nuclides(MAX_NUCLIDES) ! Indices of the nuclides
-    real(8)    :: atom_density(MAX_NUCLIDES)  ! atom density of a nuclide
-  end type BankedParticle
-
 contains
 
 !===============================================================================

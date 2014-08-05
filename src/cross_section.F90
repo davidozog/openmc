@@ -17,10 +17,10 @@ module cross_section
   
   integer :: union_grid_index
 
-!dir$ attributes offload:mic :: master_xs_bank
-!dir$ attributes align:64 :: master_xs_bank
-  type(bankedparticle), allocatable, target :: master_xs_bank(:)
-  public :: master_xs_bank
+!!dir$ attributes offload:mic :: master_xs_bank
+!!dir$ attributes align:64 :: master_xs_bank
+!  type(bankedparticle), allocatable, target :: master_xs_bank(:)
+!  public :: master_xs_bank
 
 !$omp threadprivate(union_grid_index)
 
@@ -36,20 +36,20 @@ contains
     integer :: i
     type(Particle), intent(inout) :: p
     type(Material), pointer :: mat => null() ! current material
-
+    
     current_bank_slot = n_bank_xs + 1
-    xs_bank(current_bank_slot) % id         = p % id
-    xs_bank(current_bank_slot) % type       = p % type
-    xs_bank(current_bank_slot) % material   = p % material
-    xs_bank(current_bank_slot) % E          = p % E
+    bp_tp_id(current_bank_slot) = p % id
+    bp_tp_type(current_bank_slot) = p % type
+    bp_tp_material(current_bank_slot) = p % material
+    bp_tp_E(current_bank_slot) = p % E
 
     mat => materials(p % material)
-    xs_bank(current_bank_slot) % check_sab  = (mat % n_sab > 0)
-    xs_bank(current_bank_slot) % n_nuclides = mat % n_nuclides
+    bp_tp_check_sab(current_bank_slot) = (mat % n_sab > 0)
+    bp_tp_n_nuclides(current_bank_slot) = mat % n_nuclides
 
     do i=1, mat % n_nuclides
-      xs_bank(current_bank_slot) % nuclides(i) = mat % nuclide(i)
-      xs_bank(current_bank_slot) % atom_density(i) = mat % atom_density(i)
+      bp_tp_nuclides(i, current_bank_slot) = mat % nuclide(i)
+      bp_tp_atom_density(i, current_bank_slot) = mat % atom_density(i)
     end do
 
     ! increment number of bank sites
@@ -59,12 +59,12 @@ contains
     n_bank_xs = min(int(n_bank_xs + 1, 8), work+1)
 #endif
 
-    if (xs_bank(current_bank_slot) % material == MATERIAL_VOID) then
-      xs_bank(current_bank_slot) % energy_index = -1
+    if (bp_tp_material(current_bank_slot) == MATERIAL_VOID) then
+      bp_tp_energy_index(current_bank_slot) = -1
       print *, "WARNING: NOT SURE IF THIS IS COOL..."
     else if (grid_method == GRID_UNION) then
-      xs_bank(current_bank_slot) % energy_index = &
-              find_energy_index(xs_bank(current_bank_slot) % E)
+      bp_tp_energy_index(current_bank_slot) = &
+              find_energy_index(bp_tp_E(current_bank_slot))
     else
       message = "NON UNION MIC NOT IMPLEMENTED YET."
       call fatal_error()
@@ -121,7 +121,7 @@ contains
 !   print *, "DOING:", total_xs
 
 !dir$ offload begin target(mic:0)                                        &
-!dir$        in(master_xs_bank, mic_energy, mic_grid_index,              &
+!dir$        in(mic_energy, mic_grid_index,                              &
 !dir$           mic_total, mic_elastic, mic_absorption, mic_fission,     &
 !dir$           mic_nu_fission, mic_n_grid)                              &
 !dir$        inout(mic_mat_total, mic_mat_elastic, mic_mat_absorption,   &
@@ -134,22 +134,27 @@ contains
 !dir$           mic_micro_last_index_sab)
     wtime = omp_get_wtime()
 
-!$omp parallel do simd private(atom_density,i_nuclide,i_sab, p_id, i_grid, E, E_idx, f)
+!$omp parallel do private(atom_density,i_nuclide,i_sab, p_id, i_grid, E, E_idx, f) &
+!$omp&            schedule(guided)
     do pp = 1, total_xs
 !     print *, "hi:", omp_get_thread_num(), master_xs_bank(pp)
 
 !     write(*,*)'Thread id: ', OMP_GET_THREAD_NUM()
 
-      j = 1
-      p_id = master_xs_bank(pp) % id
+!     j = 1
+      p_id = bp_id(pp)
 
 !   do i=1, mic_n_nuclides_total
 !     print *, "MYMIRCRO-mic:", mymicro_xs(i)
 !   end do
 
+!!dir$ noprefetch mic_micro_index_grid
+!!dir$ prefetch bp_n_nuclides, mic_grid_index, mic_nuc_base_idx
+!!dir$ prefetch bp_nuclides, bp_energy_index, bp_E
+
 !NOTE: might need a "simd" pragma here
 !dir$ ivdep
-      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, master_xs_bank(pp) % n_nuclides
+      NUCLIDES_IN_MATERIAL_LOOP: do i = 1, bp_n_nuclides(pp)
         ! ======================================================================
         ! CHECK FOR S(A,B) TABLE
         i_sab = 0
@@ -173,7 +178,7 @@ contains
 !        end if
 
 !       TODO:  Do I need this?  Why MAX used?
-        i_nuclide = master_xs_bank(pp) % nuclides(i)
+        i_nuclide = bp_nuclides(i, pp)
         ! Calculate microscopic cross section for this nuclide
 !       if (master_xs_bank(pp) % E /= mymicro_xs(i_nuclide, p_id) % last_E) then
 !         call calculate_nuclide_xs(i_nuclide, i_sab, master_xs_bank(pp) % E, &
@@ -184,8 +189,8 @@ contains
 !       end if
 
 !   nuc => mic_nuclides(i_nuclide)
-    i_grid = master_xs_bank(pp) % energy_index
-    E = master_xs_bank(pp) % E
+    i_grid = bp_energy_index(pp)
+    E = bp_E(pp)
     !E_idx = mic_grid_index((i_nuclide-1)*mic_n_grid + i_grid)
     E_idx = mic_nuc_base_idx(i_nuclide) + mic_grid_index((i_nuclide-1)*mic_n_grid + i_grid)
 
@@ -235,11 +240,11 @@ contains
     ! need to correct it by subtracting the non-S(a,b) elastic cross section and
     ! then add back in the calculated S(a,b) elastic+inelastic cross section.
 
-    if (i_sab > 0) then
-!     print *, "SAB NOT IMPLEMENTED YET."
-      stop 1
-      !call calculate_sab_xs(i_nuclide, i_sab, E)
-    end if
+!    if (i_sab > 0) then
+!!     print *, "SAB NOT IMPLEMENTED YET."
+!      stop 1
+!      !call calculate_sab_xs(i_nuclide, i_sab, E)
+!    end if
 
     ! if the particle is in the unresolved resonance range and there are
     ! probability tables, we need to determine cross sections from the table
@@ -257,7 +262,7 @@ contains
     mic_micro_last_index_sab(i_nuclide, p_id) = i_sab
 
         ! Copy atom density of nuclide in material
-        atom_density = master_xs_bank(pp) % atom_density(i)
+        atom_density = bp_atom_density(i, pp)
 
         ! Add contributions to material macroscopic total cross section
         mic_mat_total(p_id) = mic_mat_total(p_id) + &

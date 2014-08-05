@@ -72,9 +72,9 @@ ifeq ($(COMPILER),intel)
 
   # Debugging
   ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+    #F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
 		#For -vec-report to work:
-    #F90FLAGS += -warn -fp-stack-check -fpe0
+    F90FLAGS += -g -warn -fp-stack-check
     LDFLAGS  += -g
   endif
 
@@ -183,8 +183,10 @@ endif
 
 ifeq ($(OPENMP),yes)
   ifeq ($(COMPILER),intel)
-    F90FLAGS += -openmp
-    LDFLAGS += -openmp
+    F90FLAGS += -openmp -mmic
+    LDFLAGS += -openmp -mmic
+    #F90FLAGS += -openmp
+    #LDFLAGS += -openmp
   endif
 
   ifeq ($(COMPILER),gnu)
@@ -264,7 +266,7 @@ uninstall:
 distclean: clean
 	cd xml; make clean
 clean:
-	@rm -f *.o *.mod $(program)
+	@rm -f *.o *.mod *.modmic $(program)
 neat:
 	@rm -f *.o *.mod
 

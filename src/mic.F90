@@ -1,3 +1,7 @@
+! These variables store particles for vector processing assistance.
+! See Brown and Martin "MONTE CARLO METHODS FOR RADIATION TRANSPORT ANALYSIS
+! ON VECTOR COMPUTERS" (1984) for details.
+
 module mic
   
 ! TODO:
@@ -14,6 +18,55 @@ module mic
 !   real(8) :: Q_value
 !   logical :: urr
 ! end type MICNuclide
+
+!===============================================================================
+! BANKEDPARTICLE constains the necessary state variables of a particle that
+! needs to performance cross section lookups (for vectorization purposes)
+!===============================================================================
+!  type BankedParticle
+!    ! Basic data
+!    integer(8) :: id                  ! Unique ID
+!    integer    :: type                ! Particle type (n, p, e, etc)
+!    integer    :: material            ! index for current material
+!    real(8)    :: E                   ! energy
+!    integer    :: energy_index        ! unionized energy index
+!    logical    :: check_sab           ! whether this material has S(a,b) tables
+!    integer    :: n_nuclides          ! number of nuclides
+!    integer    :: nuclides(MAX_NUCLIDES) ! Indices of the nuclides
+!    real(8)    :: atom_density(MAX_NUCLIDES)  ! atom density of a nuclide
+!  end type BankedParticle
+
+  integer :: n_bank_xs = 0   ! Thread-private number of banked particles for 
+                             ! cross section lookup
+
+! type(BankedParticle), allocatable, target :: xs_bank(:)
+
+! Banked Particle (bp) thread-private (tp) arrays
+  integer(8), allocatable :: bp_tp_id(:)             ! Unique ID
+  integer, allocatable    :: bp_tp_type(:)           ! Particle type (n, p, e, etc)
+  integer, allocatable    :: bp_tp_material(:)       ! index for current material
+  real(8), allocatable    :: bp_tp_E(:)              ! energy
+  integer, allocatable    :: bp_tp_energy_index(:)   ! unionized energy index
+  logical, allocatable    :: bp_tp_check_sab(:)      ! whether this material has S(a,b) tables
+  integer, allocatable    :: bp_tp_n_nuclides(:)     ! number of nuclides
+  integer, allocatable    :: bp_tp_nuclides(:,:)     ! Indices of the nuclides
+  real(8), allocatable    :: bp_tp_atom_density(:,:) ! atom density of a nuclide
+
+! Banked Particle (bp) arrays
+  integer(8), allocatable :: bp_id(:)             ! Unique ID
+  integer, allocatable    :: bp_type(:)           ! Particle type (n, p, e, etc)
+  integer, allocatable    :: bp_material(:)       ! index for current material
+  real(8), allocatable    :: bp_E(:)              ! energy
+  integer, allocatable    :: bp_energy_index(:)   ! unionized energy index
+  logical, allocatable    :: bp_check_sab(:)      ! whether this material has S(a,b) tables
+  integer, allocatable    :: bp_n_nuclides(:)     ! number of nuclides
+  integer, allocatable    :: bp_nuclides(:,:)     ! Indices of the nuclides
+  real(8), allocatable    :: bp_atom_density(:,:) ! atom density of a nuclide
+!$omp threadprivate(n_bank_xs, bp_tp_id, bp_tp_type, bp_tp_material, bp_tp_E, &
+!$omp&              bp_tp_energy_index, bp_tp_check_sab, bp_tp_n_nuclides,    &
+!$omp&              bp_tp_nuclides, bp_tp_atom_density)
+
+
 
   integer, allocatable, save :: mic_nuc_base_idx(:)
   integer, allocatable, save :: mic_nuc_Q_value(:)
@@ -73,7 +126,9 @@ module mic
   public mic_materials, mic_n_nuclides, mic_grid_index, mic_energy, &
          mic_total, mic_elastic, mic_fission, mic_nu_fission, mic_absorption, &
          mic_heating, mic_nuc_base_idx, mic_n_nuclides_total, mic_n_grid,     &
-         mic_nuc_Q_value, mic_work
+         mic_nuc_Q_value, mic_work, bp_tp_id, bp_tp_type, bp_tp_material,     &
+         bp_tp_E, bp_tp_energy_index, bp_tp_check_sab, bp_tp_n_nuclides,      &
+         bp_tp_nuclides, bp_tp_atom_density
 
 !dir$ attributes offload:mic :: mic_materials, mic_n_nuclides, mic_grid_index, &
 !dir$    mic_energy, mic_total, mic_elastic, mic_fission, mic_nu_fission,      &
@@ -84,7 +139,11 @@ module mic
 !dir$    mic_micro_nu_fission, mic_micro_kappa_fission, mic_micro_index_sab,   &
 !dir$    mic_micro_last_index_sab, mic_micro_elastic_sab, mic_micro_use_ptable,&
 !dir$    mic_mat_total, mic_mat_elastic, mic_mat_absorption, mic_mat_fission,  &
-!dir$    mic_mat_nu_fission, mic_mat_kappa_fission, mic_nuc_Q_value
+!dir$    mic_mat_nu_fission, mic_mat_kappa_fission, mic_nuc_Q_value,           &
+!dir$    bp_id, bp_type, bp_material, bp_E, bp_energy_index,                   &
+!dir$    bp_check_sab, bp_n_nuclides, bp_nuclides, bp_atom_density,            &
+!dir$    bp_tp_id, bp_tp_type, bp_tp_material, bp_tp_E, bp_tp_energy_index,    &
+!dir$    bp_tp_check_sab, bp_tp_n_nuclides, bp_tp_nuclides, bp_tp_atom_density
 
 !dir$ attributes align:64 :: mic_materials, mic_n_nuclides, mic_grid_index,    &
 !dir$    mic_energy, mic_total, mic_elastic, mic_fission, mic_nu_fission,      &
@@ -95,7 +154,11 @@ module mic
 !dir$    mic_micro_nu_fission, mic_micro_kappa_fission, mic_micro_index_sab,   &
 !dir$    mic_micro_last_index_sab, mic_micro_elastic_sab, mic_micro_use_ptable,&
 !dir$    mic_mat_total, mic_mat_elastic, mic_mat_absorption, mic_mat_fission,  &
-!dir$    mic_mat_nu_fission, mic_mat_kappa_fission, mic_nuc_Q_value
+!dir$    mic_mat_nu_fission, mic_mat_kappa_fission, mic_nuc_Q_value,           &
+!dir$    bp_id, bp_type, bp_material, bp_E, bp_energy_index,                   &
+!dir$    bp_check_sab, bp_n_nuclides, bp_nuclides, bp_atom_density,            &
+!dir$    bp_tp_id, bp_tp_type, bp_tp_material, bp_tp_E, bp_tp_energy_index,    &
+!dir$    bp_tp_check_sab, bp_tp_n_nuclides, bp_tp_nuclides, bp_tp_atom_density
 
 contains 
 

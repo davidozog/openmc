@@ -924,16 +924,62 @@ contains
     mic_n_nuclides_total = n_nuclides_total
     mic_n_grid = n_grid
     mic_work = work
-    allocate(mic_materials(n_materials))
-    allocate(mic_n_nuclides(n_materials))
-
+    allocate(mic_materials(n_materials), STAT=ierr)
+    allocate(mic_n_nuclides(n_materials), STAT=ierr)
     allocate(mic_nuc_base_idx(n_nuclides_total), STAT=ierr)
     allocate(mic_nuc_Q_value(n_nuclides_total), STAT=ierr)
     if ( ierr /= 0 ) then
-      write(*,*) 'Oops, mic nuclides failed!'
+      write(*,*) 'Oops, mic materials/nuclides allocs failed!'
     else
       write(*,*) 'Allocation success'
     endif
+
+#ifdef _OPENMP
+!$omp parallel
+    thread_id = omp_get_thread_num()
+    print *, "WORK IS ", work
+    print *, "n_threads IS ", n_threads 
+    if (thread_id == 0) then
+       ! For MIC, allocate a cross section lookup bank:
+      allocate(bp_tp_id(work), STAT=ierr)             
+      allocate(bp_tp_type(work), STAT=ierr)           
+      allocate(bp_tp_material(work), STAT=ierr)       
+      allocate(bp_tp_E(work), STAT=ierr)              
+      allocate(bp_tp_energy_index(work), STAT=ierr)   
+      allocate(bp_tp_check_sab(work), STAT=ierr)      
+      allocate(bp_tp_n_nuclides(work), STAT=ierr)     
+      allocate(bp_tp_nuclides(MAX_NUCLIDES, work), STAT=ierr)
+      allocate(bp_tp_atom_density(MAX_NUCLIDES, work), STAT=ierr)
+    else
+      allocate(bp_tp_id(work/n_threads+1), STAT=ierr)             
+      allocate(bp_tp_type(work/n_threads+1), STAT=ierr)           
+      allocate(bp_tp_material(work/n_threads+1), STAT=ierr)       
+      allocate(bp_tp_E(work/n_threads+1), STAT=ierr)              
+      allocate(bp_tp_energy_index(work/n_threads+1), STAT=ierr)   
+      allocate(bp_tp_check_sab(work/n_threads+1), STAT=ierr)      
+      allocate(bp_tp_n_nuclides(work/n_threads+1), STAT=ierr)     
+      allocate(bp_tp_nuclides(MAX_NUCLIDES, work/n_threads+1), STAT=ierr)
+      allocate(bp_tp_atom_density(MAX_NUCLIDES, work/n_threads+1), STAT=ierr)
+    end if
+!$omp end parallel
+      allocate(bp_id(work), STAT=ierr)             
+      allocate(bp_type(work), STAT=ierr)           
+      allocate(bp_material(work), STAT=ierr)       
+      allocate(bp_E(work), STAT=ierr)              
+      allocate(bp_energy_index(work), STAT=ierr)   
+      allocate(bp_check_sab(work), STAT=ierr)      
+      allocate(bp_n_nuclides(work), STAT=ierr)     
+      allocate(bp_nuclides(MAX_NUCLIDES, work), STAT=ierr)
+      allocate(bp_atom_density(MAX_NUCLIDES, work), STAT=ierr)
+    if ( ierr /= 0 ) then
+      write(*,*) 'Oops, mic banked particle allocs failed!'
+    else
+      write(*,*) 'Allocation success'
+    endif
+#else
+  print *, "Uh oh..."
+  stop
+#endif
 
     mic_nuc_base_idx(1) = 0
     i_nuclide = 0

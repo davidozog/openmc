@@ -14,7 +14,7 @@ module global
   use source_header,    only: ExtSource
   use tally_header,     only: TallyObject, TallyMap, TallyResult
   use timer_header,     only: Timer
-  use particle_header,  only: BankedParticle
+  use mic
 
 #ifdef HDF5
   use hdf5_interface,  only: HID_T
@@ -221,18 +221,6 @@ module global
   logical :: reduce_tallies = .true.
 
   ! ============================================================================
-  ! VECTORIZED PROCESSING VARIABLES
-
-  ! These variables store particles for vector processing assistance.
-  ! See Brown and Martin "MONTE CARLO METHODS FOR RADIATION TRANSPORT ANALYSIS
-  ! ON VECTOR COMPUTERS" (1984) for details.
-
-  integer :: n_bank_xs = 0   ! Thread-private number of banked particles for 
-                             ! cross section lookup
-
-  type(BankedParticle), allocatable, target :: xs_bank(:)
-
-  ! ============================================================================
   ! TIMING VARIABLES
 
   type(Timer) :: time_total         ! timer for total run
@@ -393,8 +381,7 @@ module global
   logical :: output_tallies = .true.
 
 !$omp threadprivate(micro_xs, material_xs, fission_bank, n_bank, message, &
-!$omp&              trace, thread_id, current_work, matching_bins, n_bank_xs, &
-!$omp               xs_bank)
+!$omp&              trace, thread_id, current_work, matching_bins)
 
 contains
 
@@ -462,10 +449,28 @@ contains
     ! Deallocate fission and source bank and entropy
 !$omp parallel
     if (allocated(fission_bank)) deallocate(fission_bank)
-    if (allocated(xs_bank)) deallocate(xs_bank)
+!   if (allocated(xs_bank)) deallocate(xs_bank)
 !$omp end parallel
 #ifdef _OPENMP
     if (allocated(master_fission_bank)) deallocate(master_fission_bank)
+    if (allocated(bp_id)) deallocate(bp_id)
+    if (allocated(bp_type)) deallocate(bp_type)
+    if (allocated(bp_material)) deallocate(bp_material)
+    if (allocated(bp_E)) deallocate(bp_E)
+    if (allocated(bp_energy_index)) deallocate(bp_energy_index)
+    if (allocated(bp_check_sab)) deallocate(bp_check_sab)
+    if (allocated(bp_n_nuclides)) deallocate(bp_n_nuclides)
+    if (allocated(bp_nuclides)) deallocate(bp_nuclides)
+    if (allocated(bp_atom_density)) deallocate(bp_atom_density)
+    if (allocated(bp_tp_id)) deallocate(bp_tp_id)
+    if (allocated(bp_tp_type)) deallocate(bp_tp_type)
+    if (allocated(bp_tp_material)) deallocate(bp_tp_material)
+    if (allocated(bp_tp_E)) deallocate(bp_tp_E)
+    if (allocated(bp_tp_energy_index)) deallocate(bp_tp_energy_index)
+    if (allocated(bp_tp_check_sab)) deallocate(bp_tp_check_sab)
+    if (allocated(bp_tp_n_nuclides)) deallocate(bp_tp_n_nuclides)
+    if (allocated(bp_tp_nuclides)) deallocate(bp_tp_nuclides)
+    if (allocated(bp_tp_atom_density)) deallocate(bp_tp_atom_density)
 #endif
     if (allocated(source_bank)) deallocate(source_bank)
     if (allocated(entropy_p)) deallocate(entropy_p)
