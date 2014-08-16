@@ -2,8 +2,11 @@
 *.a
 *.o
 *.mod
+*.modmic
 *.log
 *.out
+*.*.swp
+*.*.swo
 
 # Compiler python objects
 *.pyc
@@ -32,3 +35,5 @@ results_error.dat
 
 # HDF5 files
 *.h5
+
+data/endf*

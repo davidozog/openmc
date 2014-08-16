@@ -72,10 +72,14 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(dynamic) firstprivate(p) &
-!$omp reduction(+:tally_tracklength,tally_collision,&
-!$omp tally_leakage,tally_absorption)
+!$omp parallel do schedule(static) firstprivate(p) &
+!$omp reduction(+:tally_tracklength) &
+!$omp reduction(+:tally_collision) &
+!$omp reduction(+:tally_leakage) &
+!$omp reduction(+:tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
+
+
           current_work = i_work
 
           ! grab source particle from bank
@@ -225,6 +229,8 @@ contains
       ! reset private tallies
       tally_tracklength = 0
       tally_collision = 0
+      tally_leakage     = 0
+      tally_absorption  = 0
     end if
 
     ! Perform CMFD calculation if on

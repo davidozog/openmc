@@ -11,8 +11,8 @@ xml_lib = -Lxml/lib -lxml
 
 COMPILER = intel
 DEBUG    = yes
-PROFILE  = yes
-OPTIMIZE = no
+PROFILE  = no
+OPTIMIZE = yes
 MPI      = no
 OPENMP   = yes
 HDF5     = no
@@ -67,12 +67,14 @@ endif
 
 ifeq ($(COMPILER),intel)
   F90 = ifort
+  #F90FLAGS := -fpp -std08 -assume byterecl -traceback -opt-report-phase=offload
   F90FLAGS := -fpp -std08 -assume byterecl -traceback
   LDFLAGS =
 
   # Debugging
   ifeq ($(DEBUG),yes)
-    F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+    #F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+    F90FLAGS += -g -warn 
     LDFLAGS  += -g
   endif
 
@@ -181,6 +183,8 @@ endif
 
 ifeq ($(OPENMP),yes)
   ifeq ($(COMPILER),intel)
+    #F90FLAGS += -openmp -mmic -vec-report=3
+    #LDFLAGS += -openmp -mmic
     F90FLAGS += -openmp
     LDFLAGS += -openmp
   endif

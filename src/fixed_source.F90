@@ -52,9 +52,11 @@ contains
 
       ! =======================================================================
       ! LOOP OVER PARTICLES
-!$omp parallel do schedule(dynamic) firstprivate(p) &
-!$omp reduction(+:tally_tracklength,tally_collision,&
-!$omp tally_leakage,tally_absorption)
+!$omp parallel do schedule(static) firstprivate(p) &
+!$omp reduction(+:tally_tracklength) &
+!$omp reduction(+:tally_collision) &
+!$omp reduction(+:tally_leakage) &
+!$omp reduction(+:tally_absorption)
       PARTICLE_LOOP: do i = 1, work
 
         ! Set unique particle ID

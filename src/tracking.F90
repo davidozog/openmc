@@ -112,6 +112,7 @@ contains
            call score_tracklength_tally(p, distance)
 
       ! Score track-length estimate of k-eff
+!$omp atomic
       tally_tracklength = tally_tracklength + p % wgt * &
            distance * material_xs % nu_fission
 
@@ -137,6 +138,7 @@ contains
         ! PARTICLE HAS COLLISION
 
         ! Score collision estimate of keff
+!$omp atomic
         tally_collision = tally_collision + p % wgt * &
              material_xs % nu_fission / material_xs % total
 
