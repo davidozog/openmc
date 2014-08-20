@@ -18,6 +18,29 @@ Installation
 
 Detailed `installation instructions`_ can be found in the User's Guide.
 
+---------------------------
+XEON PHI (MIC) INSTRUCTIONS
+---------------------------
+
+Please follow these steps:
+  1) build the host binary normally by setting "MIC = no" in the Makefile
+  2) remove all the host object and .mod files by typing "make hostclean"
+  3) set "MIC = yes" in the makefile and type "make" again.  
+
+This creates two binaries: "openmc" will run on the host and "openmc.mic"
+will run on the Xeon Phi device.
+
+Set the following environment variables,
+  export I_MPI_MIC=enable
+  export I_MPI_MIC_POSTFIX=.mic
+  export I_MPI_ROOT=/soft/compilers/intel/impi/4.1.3.048
+  export I_MPI_FABRICS=shm:tcp  # or shm:dapl on InfiniBand
+
+The application can then be run on the host and multiple MIC devices:
+  mpirun -n 1 -host localhost path/to/src/openmc : \
+         -n 1 -host mic0 path/to/src/openmc : \
+         -n 1 -host mic1 path/to/src/openmc
+
 ---------------
 Troubleshooting
 ---------------

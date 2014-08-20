@@ -1,4 +1,5 @@
 program = openmc
+program-mic = openmc.mic
 prefix = /usr/local
 
 source = $(wildcard *.F90)
@@ -13,10 +14,12 @@ COMPILER = intel
 DEBUG    = yes
 PROFILE  = no
 OPTIMIZE = yes
-MPI      = no
+MPI      = yes
 OPENMP   = yes
 HDF5     = no
 PETSC    = no
+MIC      = no
+#NOTE: keep 'MIC=yes' for development
 
 #===============================================================================
 # External Library Paths
@@ -73,9 +76,14 @@ ifeq ($(COMPILER),intel)
 
   # Debugging
   ifeq ($(DEBUG),yes)
-    #F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
-    F90FLAGS += -g -warn 
-    LDFLAGS  += -g
+    ifeq ($(MIC),yes)
+      #F90FLAGS += -g -warn -vec-report=3
+      F90FLAGS += -g -warn
+      LDFLAGS  += -g
+    else
+      F90FLAGS += -g -warn -ftrapuv -fp-stack-check -check all -fpe0
+      LDFLAGS  += -g
+    endif
   endif
 
   # Profiling
@@ -169,7 +177,11 @@ ifeq ($(MPI),yes)
     F90 = $(PHDF5_DIR)/bin/h5pfc
     F90FLAGS += -DHDF5
   else
-    F90 = $(MPI_DIR)/bin/mpif90
+    ifeq ($(COMPILER),intel)
+      F90 = mpiifort
+    else
+      F90 = mpif90
+    endif
   endif
   F90FLAGS += -DMPI
 else
@@ -183,10 +195,13 @@ endif
 
 ifeq ($(OPENMP),yes)
   ifeq ($(COMPILER),intel)
-    #F90FLAGS += -openmp -mmic -vec-report=3
-    #LDFLAGS += -openmp -mmic
-    F90FLAGS += -openmp
-    LDFLAGS += -openmp
+    ifeq ($(MIC),yes)
+      F90FLAGS += -openmp -mmic
+      LDFLAGS += -openmp -mmic
+    else
+      F90FLAGS += -openmp
+      LDFLAGS += -openmp
+    endif
   endif
 
   ifeq ($(COMPILER),gnu)
@@ -244,10 +259,16 @@ endif
 # Targets
 #===============================================================================
 
+ifeq ($(MIC),yes)
+all: xml $(program-mic)
+else
 all: xml $(program)
+endif
 xml:
 	cd xml; make MACHINE=$(MACHINE) F90=$(F90) F90FLAGS="$(F90FLAGS)" LDFLAGS="$(LDFLAGS)"
 $(program): $(objects)
+	$(F90) $(objects) $(xml_lib) $(LDFLAGS) -o $@
+$(program-mic): $(objects)
 	$(F90) $(objects) $(xml_lib) $(LDFLAGS) -o $@
 install:
 	@install -D $(program) $(DESTDIR)$(prefix)/bin/$(program)
@@ -265,8 +286,10 @@ uninstall:
 	@rm $(DESTDIR)$(prefix)/share/doc/$(program)/copyright
 distclean: clean
 	cd xml; make clean
+hostclean: neat
+	cd xml; make clean
 clean:
-	@rm -f *.o *.mod $(program)
+	@rm -f *.o *.mod $(program) $(program-mic)
 neat:
 	@rm -f *.o *.mod
 

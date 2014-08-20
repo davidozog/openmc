@@ -48,6 +48,9 @@ contains
 
   subroutine initialize_run()
 
+    double precision t1
+    double precision t2
+
     ! Start total and initialization timer
     call time_total % start()
     call time_initialize % start()
@@ -62,6 +65,13 @@ contains
     call hdf5_initialize()
 #endif
 
+#ifdef __MIC__
+    print *, "YES, on MIC!"
+#else
+    print *, "NO, on host."
+#endif
+
+
     ! Read command line arguments
     call read_command_line()
 
@@ -71,8 +81,12 @@ contains
       call header("INITIALIZATION", level=1)
     end if
 
+  t1 = omp_get_wtime()
     ! Read XML input files
     call read_input_xml()
+  t2 = omp_get_wtime()
+  print *, "READ_INPUT_XML:", t2 - t1
+
 
     ! Initialize random number generator -- this has to be done after the input
     ! files have been read in case the user specified a seed for the random
@@ -105,11 +119,15 @@ contains
       call time_read_xs % stop()
 
       ! Construct unionized energy grid from cross-sections
+  t1 = omp_get_wtime()
       if (grid_method == GRID_UNION) then
         call time_unionize % start()
         call unionized_grid()
         call time_unionize % stop()
       end if
+  t2 = omp_get_wtime()
+  print *, "UNIONIZE:", t2 - t1
+  call MPI_BARRIER(MPI_COMM_WORLD, mpi_err)
 
       ! Allocate and setup tally stride, matching_bins, and tally maps
       call configure_tallies()
