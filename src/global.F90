@@ -396,7 +396,7 @@ contains
     ! Deallocate cross section data, listings, and cache
     if (allocated(nuclides)) then
     ! First call the clear routines
-      do i = 1, size(nuclides)
+      do i = 1, sizeof(nuclides)
         call nuclides(i) % clear()
       end do
       deallocate(nuclides)
@@ -422,7 +422,7 @@ contains
     if (allocated(meshes)) deallocate(meshes)
     if (allocated(tallies)) then
     ! First call the clear routines
-      do i = 1, size(tallies)
+      do i = 1, sizeof(tallies)
         call tallies(i) % clear()
       end do
       ! Now deallocate the tally array

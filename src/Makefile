@@ -12,7 +12,7 @@ xml_fort = xml-fortran/xmlparse.o \
 # User Options
 #===============================================================================
 
-COMPILER = gnu
+COMPILER = pgi
 DEBUG    = no
 PROFILE  = no
 OPTIMIZE = no
@@ -97,8 +97,8 @@ endif
 
 ifeq ($(COMPILER),pgi)
   F90 = pgf90
-  F90FLAGS := -Mpreprocess -DNO_F2008 -Minform=inform -traceback
-  LDFLAGS =
+  F90FLAGS := -Mpreprocess -DNO_F2008 -Minform=inform -traceback -acc
+  LDFLAGS = -acc
 
   # Debugging
   ifeq ($(DEBUG),yes)

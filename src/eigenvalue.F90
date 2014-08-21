@@ -40,6 +40,15 @@ contains
 
     type(Particle) :: p
     integer        :: i_work
+    !type(Particle), intent(inout) :: p
+    integer(8)  :: index_source
+
+    integer(8) :: particle_seed  ! unique index for particle
+    integer :: i
+    type(Bank), pointer, save :: src => null()
+    !class(Particle) :: this
+
+!$omp threadprivate(src)
 
     if (master) call header("K EIGENVALUE SIMULATION", level=1)
 
@@ -72,18 +81,78 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p)
+!!$omp parallel do schedule(static) firstprivate(p)
+!$acc parallel loop
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
           ! grab source particle from bank
-          call get_source_particle(p, current_work)
+    !     call get_source_particle(p, current_work)
+
+    ! set defaults
+    !all p % initialize()
+    ! Clear coordinate lists
+    call p % clear()
+
+    ! Set particle to neutron that's alive
+    p % type  = NEUTRON
+    p % alive = .true.
+
+    ! clear attributes
+    p % surface       = NONE
+    p % cell_born     = NONE
+    p % material      = NONE
+    p % last_material = NONE
+    p % wgt           = ONE
+    p % last_wgt      = ONE
+    p % absorb_wgt    = ZERO
+    p % n_bank        = 0
+    p % wgt_bank      = ZERO
+    p % n_collision   = 0
+    p % fission       = .false.
+
+    ! Set up base level coordinates
+    allocate(p % coord0)
+    p % coord0 % universe = BASE_UNIVERSE
+    p % coord             => p % coord0
+
+    ! Copy attributes from source to particle
+    src => source_bank(index_source)
+    call copy_source_attributes(p, src)
+
+    ! set identifier for particle
+    p % id = work_index(rank) + index_source
+
+    ! set random number seed
+    particle_seed = (overall_gen - 1)*n_particles + p % id
+    call set_particle_seed(particle_seed)
+
+    ! set particle trace
+    trace = .false.
+    if (current_batch == trace_batch .and. current_gen == trace_gen .and. &
+         p % id == trace_particle) trace = .true.
+
+    ! Set particle track.
+    p % write_track = .false.
+    if (write_all_tracks) then
+      p % write_track = .true.
+    else if (allocated(track_identifiers)) then
+      do i=1, size(track_identifiers(1,:))
+        if (current_batch == track_identifiers(1,i) .and. &
+             &current_gen == track_identifiers(2,i) .and. &
+             &p % id == track_identifiers(3,i)) then
+          p % write_track = .true.
+          exit
+        end if
+      end do
+    end if
 
           ! transport particle
           call transport(p)
 
         end do PARTICLE_LOOP
-!$omp end parallel do
+!$acc end parallel loop
+!!$omp end parallel do
 
         ! Accumulate time for transport
         call time_transport % stop()
