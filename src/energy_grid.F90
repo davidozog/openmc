@@ -64,7 +64,7 @@ contains
     real(8) :: E       ! actual energy value
 
     i = 1
-    n = size(energy)
+    n = sizeof(energy)
 
     ! If the original list is empty, we need to allocate the first element and
     ! store first energy point

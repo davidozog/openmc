@@ -1206,7 +1206,7 @@ contains
       call get_node_array(node_lat, "dimension", lat % dimension)
 
       ! Read lattice lower-left location
-      if (size(lat % dimension) /= &
+      if (sizeof(lat % dimension) /= &
           get_arraysize_double(node_lat, "lower_left")) then
         message = "Number of entries on <lower_left> must be the same as &
              &the number of entries on <dimension>."
@@ -1217,7 +1217,7 @@ contains
       call get_node_array(node_lat, "lower_left", lat % lower_left)
 
       ! Read lattice widths
-      if (size(lat % dimension) /= &
+      if (sizeof(lat % dimension) /= &
           get_arraysize_double(node_lat, "width")) then
         message = "Number of entries on <width> must be the same as &
              &the number of entries on <lower_left>."
@@ -2878,7 +2878,7 @@ contains
             end do
           
             ! Alter colors based on mask information
-            do j=1,size(pl % colors)
+            do j=1,sizeof(pl % colors)
               if (.not. any(j .eq. iarray)) then
                 if (check_for_node(node_mask, "background")) then
                   call get_node_array(node_mask, "background", pl % colors(j) % rgb)
@@ -2946,7 +2946,8 @@ contains
     else
        ! If no directory is listed in cross_sections.xml, by default select the
        ! directory in which the cross_sections.xml file resides
-       i = index(path_cross_sections, "/", BACK=.true.)
+       !i = index(path_cross_sections, "/")
+       i = 0 ! TODO: BAD!
        directory = path_cross_sections(1:i)
     end if
 

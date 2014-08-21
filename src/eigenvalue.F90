@@ -47,6 +47,7 @@ contains
     integer :: i
     type(Bank), pointer, save :: src => null()
     !class(Particle) :: this
+    !type(Bank),     pointer       :: src
 
 !$omp threadprivate(src)
 
@@ -92,7 +93,13 @@ contains
     ! set defaults
     !all p % initialize()
     ! Clear coordinate lists
-    call p % clear()
+    !call p % clear()
+    ! remove any coordinate levels
+    call deallocate_coord(p % coord0)
+    ! TODO: uh oh!  deallocate_coord is a recursive function!!!
+
+    ! Make sure coord pointer is nullified
+    nullify(p % coord)
 
     ! Set particle to neutron that's alive
     p % type  = NEUTRON
@@ -118,7 +125,18 @@ contains
 
     ! Copy attributes from source to particle
     src => source_bank(index_source)
-    call copy_source_attributes(p, src)
+    !call copy_source_attributes(p, src)
+    !type(Particle), intent(inout) :: p
+    !type(Bank),     pointer       :: src
+
+    ! copy attributes from source bank site
+    p % wgt         = src % wgt
+    p % last_wgt    = src % wgt
+    p % coord % xyz = src % xyz
+    p % coord % uvw = src % uvw
+    p % last_xyz    = src % xyz
+    p % E           = src % E
+    p % last_E      = src % E
 
     ! set identifier for particle
     p % id = work_index(rank) + index_source
