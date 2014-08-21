@@ -94,7 +94,7 @@ endif
 
 ifeq ($(COMPILER),pgi)
   F90 = pgf90
-  F90FLAGS := -Mpreprocess -DNO_F2008 -Minform=inform -traceback -acc
+  F90FLAGS := -Mpreprocess -DNO_F2008 -Minfo -Minform=inform -traceback -acc
   LDFLAGS = -acc
 
   # Debugging
