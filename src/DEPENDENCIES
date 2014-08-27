@@ -108,6 +108,7 @@ eigenvalue.o: tally.o
 eigenvalue.o: tracking.o
 eigenvalue.o: cross_section.o
 eigenvalue.o: mic.o
+eigenvalue.o: initialize.o
 
 endf.o: constants.o
 endf.o: string.o

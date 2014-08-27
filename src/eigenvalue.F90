@@ -24,6 +24,7 @@ module eigenvalue
   use tracking,     only: transport
   use cross_section, only: calculate_bank_xs
   use mic
+  use initialize,   only: mic_reinit 
   use omp_lib
 
   private
@@ -78,6 +79,8 @@ contains
 !   allocate(xs_bank(work), STAT=alloc_err_xs)
 #endif
 
+print *, "before batches"
+
     ! ==========================================================================
     ! LOOP OVER BATCHES
     BATCH_LOOP: do current_batch = 1, n_batches
@@ -90,6 +93,7 @@ contains
         cycle BATCH_LOOP
       end if
 
+print *, "before generation:", current_batch
       ! =======================================================================
       ! LOOP OVER GENERATIONS
       GENERATION_LOOP: do current_gen = 1, gen_per_batch
@@ -99,28 +103,39 @@ contains
         ! Start timer for transport
         call time_transport % start()
 
+print *, "before particles:", current_gen
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp  parallel do schedule(static) firstprivate(p)    &
-!$omp& reduction(+:tally_tracklength,tally_collision, &
-!$omp& tally_leakage,tally_absorption)
+!$omp  parallel do schedule(static) firstprivate(p) &
+!$omp reduction(+:tally_tracklength) &
+!$omp reduction(+:tally_collision) &
+!$omp reduction(+:tally_leakage) &
+!$omp reduction(+:tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
           current_work = i_work
 
+          if ( i_work .eq. 1 ) print *, "particle in:", i_work
+
           ! grab source particle from bank
+          !if (current_batch .eq. 1) call get_source_particle(p, current_work)
           call get_source_particle(p, current_work)
 
+          if ( i_work .eq. 1 ) print *, "particle trans:", i_work
           ! transport particle
           call transport(p)
+
+!         if ( mod(i_work, 1000) .eq. 0 ) print *, "particle out:", i_work
 
         end do PARTICLE_LOOP
 !$omp end parallel do
 
+print *, "before join_xs"
 #ifdef _OPENMP
         call join_xs_bank_from_threads()
 #else 
         call join_xs_bank()
 #endif
+print *, "after join_xs"
 
         ! Accumulate time for transport
         call time_transport % stop()
@@ -178,6 +193,8 @@ contains
 
     ! check CMFD initialize batch
     if (cmfd_run) call cmfd_init_batch()
+
+    call mic_reinit()
 
   end subroutine initialize_batch
 
@@ -951,11 +968,11 @@ contains
     do i = 1, n_threads
 !$omp ordered
       bp_id(total_xs+1:total_xs+n_bank_xs) = bp_tp_id(1:n_bank_xs)
-      bp_type(total_xs+1:total_xs+n_bank_xs) = bp_tp_type(1:n_bank_xs)
-      bp_material(total_xs+1:total_xs+n_bank_xs) = bp_tp_material(1:n_bank_xs)
+!     bp_type(total_xs+1:total_xs+n_bank_xs) = bp_tp_type(1:n_bank_xs)
+!     bp_material(total_xs+1:total_xs+n_bank_xs) = bp_tp_material(1:n_bank_xs)
       bp_E(total_xs+1:total_xs+n_bank_xs) = bp_tp_E(1:n_bank_xs)
       bp_energy_index(total_xs+1:total_xs+n_bank_xs) = bp_tp_energy_index(1:n_bank_xs)
-      bp_check_sab(total_xs+1:total_xs+n_bank_xs) = bp_tp_check_sab(1:n_bank_xs)
+!     bp_check_sab(total_xs+1:total_xs+n_bank_xs) = bp_tp_check_sab(1:n_bank_xs)
       bp_n_nuclides(total_xs+1:total_xs+n_bank_xs) = bp_tp_n_nuclides(1:n_bank_xs)
       bp_nuclides(:, total_xs+1:total_xs+n_bank_xs) = bp_tp_nuclides(:, 1:n_bank_xs)
       bp_atom_density(:, total_xs+1:total_xs+n_bank_xs) = bp_tp_atom_density(:, 1:n_bank_xs)
@@ -970,16 +987,17 @@ contains
     ! Now copy the shared fission bank sites back to the master thread's copy.
     if (thread_id == 0) then
       n_bank_xs = total_xs
-      bp_tp_id(1:n_bank_xs) = bp_id(1:n_bank_xs)
-      bp_tp_type(1:n_bank_xs) = bp_type(1:n_bank_xs)
-      bp_tp_material(1:n_bank_xs) = bp_material(1:n_bank_xs)
-      bp_tp_E(1:n_bank_xs) = bp_E(1:n_bank_xs)
-      bp_tp_energy_index(1:n_bank_xs) = bp_energy_index(1:n_bank_xs)
-      bp_tp_check_sab(1:n_bank_xs) = bp_check_sab(1:n_bank_xs)
-      bp_tp_n_nuclides(1:n_bank_xs) = bp_n_nuclides(1:n_bank_xs)
-      bp_tp_nuclides(:, 1:n_bank_xs) = bp_nuclides(:, 1:n_bank_xs)
-      bp_tp_atom_density(:, 1:n_bank_xs) = bp_atom_density(:, 1:n_bank_xs)
-      !print *, "xs:", xs_bank
+!     bp_tp_id(1:n_bank_xs) = bp_id(1:n_bank_xs)
+!     bp_tp_type(1:n_bank_xs) = bp_type(1:n_bank_xs)
+!     bp_tp_material(1:n_bank_xs) = bp_material(1:n_bank_xs)
+!     bp_tp_E(1:n_bank_xs) = bp_E(1:n_bank_xs)
+!     bp_tp_energy_index(1:n_bank_xs) = bp_energy_index(1:n_bank_xs)
+!     bp_tp_check_sab(1:n_bank_xs) = bp_check_sab(1:n_bank_xs)
+!     bp_tp_n_nuclides(1:n_bank_xs) = bp_n_nuclides(1:n_bank_xs)
+!     bp_tp_nuclides(:, 1:n_bank_xs) = bp_nuclides(:, 1:n_bank_xs)
+!     bp_tp_atom_density(:, 1:n_bank_xs) = bp_atom_density(:, 1:n_bank_xs)
+!     !print *, "xs:", xs_bank
+!     n_bank_xs = 0
     else
       n_bank_xs = 0
     end if

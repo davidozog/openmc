@@ -389,6 +389,6 @@ module constants
   !=============================================================================
   ! VECTORIZATION (MIC) CONSTANTS
 
-  integer, parameter :: MAX_NUCLIDES = 512
+  integer, parameter :: MAX_NUCLIDES = 330
 
 end module constants

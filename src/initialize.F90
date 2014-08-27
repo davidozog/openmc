@@ -939,35 +939,35 @@ contains
     thread_id = omp_get_thread_num()
     print *, "WORK IS ", work
     print *, "n_threads IS ", n_threads 
-    if (thread_id == 0) then
-       ! For MIC, allocate a cross section lookup bank:
-      allocate(bp_tp_id(work), STAT=ierr)             
-      allocate(bp_tp_type(work), STAT=ierr)           
-      allocate(bp_tp_material(work), STAT=ierr)       
-      allocate(bp_tp_E(work), STAT=ierr)              
-      allocate(bp_tp_energy_index(work), STAT=ierr)   
-      allocate(bp_tp_check_sab(work), STAT=ierr)      
-      allocate(bp_tp_n_nuclides(work), STAT=ierr)     
-      allocate(bp_tp_nuclides(MAX_NUCLIDES, work), STAT=ierr)
-      allocate(bp_tp_atom_density(MAX_NUCLIDES, work), STAT=ierr)
-    else
-      allocate(bp_tp_id(work/n_threads+1), STAT=ierr)             
-      allocate(bp_tp_type(work/n_threads+1), STAT=ierr)           
-      allocate(bp_tp_material(work/n_threads+1), STAT=ierr)       
-      allocate(bp_tp_E(work/n_threads+1), STAT=ierr)              
-      allocate(bp_tp_energy_index(work/n_threads+1), STAT=ierr)   
-      allocate(bp_tp_check_sab(work/n_threads+1), STAT=ierr)      
-      allocate(bp_tp_n_nuclides(work/n_threads+1), STAT=ierr)     
-      allocate(bp_tp_nuclides(MAX_NUCLIDES, work/n_threads+1), STAT=ierr)
-      allocate(bp_tp_atom_density(MAX_NUCLIDES, work/n_threads+1), STAT=ierr)
-    end if
+!    if (thread_id == 0) then
+!       ! For MIC, allocate a cross section lookup bank:
+!      allocate(bp_tp_id(work), STAT=ierr)             
+!!     allocate(bp_tp_type(work), STAT=ierr)           
+!!     allocate(bp_tp_material(work), STAT=ierr)       
+!      allocate(bp_tp_E(work), STAT=ierr)              
+!      allocate(bp_tp_energy_index(work), STAT=ierr)   
+!!     allocate(bp_tp_check_sab(work), STAT=ierr)      
+!      allocate(bp_tp_n_nuclides(work), STAT=ierr)     
+!      allocate(bp_tp_nuclides(MAX_NUCLIDES, work), STAT=ierr)
+!      allocate(bp_tp_atom_density(MAX_NUCLIDES, work), STAT=ierr)
+!    else
+      allocate(bp_tp_id(work/n_threads+2), STAT=ierr)             
+!     allocate(bp_tp_type(work/n_threads+2), STAT=ierr)           
+!     allocate(bp_tp_material(work/n_threads+2), STAT=ierr)       
+      allocate(bp_tp_E(work/n_threads+2), STAT=ierr)              
+      allocate(bp_tp_energy_index(work/n_threads+2), STAT=ierr)   
+!     allocate(bp_tp_check_sab(work/n_threads+2), STAT=ierr)      
+      allocate(bp_tp_n_nuclides(work/n_threads+2), STAT=ierr)     
+      allocate(bp_tp_nuclides(MAX_NUCLIDES, work/n_threads+2), STAT=ierr)
+      allocate(bp_tp_atom_density(MAX_NUCLIDES, work/n_threads+2), STAT=ierr)
+!   end if
 !$omp end parallel
       allocate(bp_id(work), STAT=ierr)             
-      allocate(bp_type(work), STAT=ierr)           
-      allocate(bp_material(work), STAT=ierr)       
+!     allocate(bp_type(work), STAT=ierr)           
+!     allocate(bp_material(work), STAT=ierr)       
       allocate(bp_E(work), STAT=ierr)              
       allocate(bp_energy_index(work), STAT=ierr)   
-      allocate(bp_check_sab(work), STAT=ierr)      
+!     allocate(bp_check_sab(work), STAT=ierr)      
       allocate(bp_n_nuclides(work), STAT=ierr)     
       allocate(bp_nuclides(MAX_NUCLIDES, work), STAT=ierr)
       allocate(bp_atom_density(MAX_NUCLIDES, work), STAT=ierr)
@@ -1113,5 +1113,60 @@ contains
     endif
 
   end subroutine mic_initialize
+
+  subroutine mic_reinit()
+    integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
+    type(Nuclide), pointer :: nuc => null()
+    integer :: ierr 
+
+    mic_nuc_base_idx(1) = 0
+    i_nuclide = 0
+    n_grid_total = 0
+
+    print *, "n_materials:", n_materials
+    print *, "n_nuclides_total:", n_nuclides_total
+    print *, "global n_grid", n_grid
+
+    do i = 1, n_nuclides_total
+      nuc => nuclides(i)
+      ngrd = nuc % n_grid
+      if (i /= n_nuclides_total) then
+        mic_nuc_base_idx(i+1) = mic_nuc_base_idx(i) + ngrd
+      end if
+      if (nuclides(i) % fissionable) then
+        mic_nuc_Q_value(i) = &
+          nuc % reactions (nuc % index_fission(1)) % Q_value
+      end if
+
+!   Keep track of how much memory needs to be allocated
+      n_grid_total = n_grid_total + ngrd
+
+    end do
+
+! create associated energy grids and cross section arrays
+    n_grid_total = 0
+    do i = 1, n_nuclides_total
+      nuc => nuclides(i)
+      ngrd = nuc % n_grid
+      do j = 1, ngrd
+        jdx = j + n_grid_total
+        mic_energy(jdx) = nuc % energy(j)
+        mic_total(jdx) = nuc % total(j)
+        mic_elastic(jdx) = nuc % elastic(j)
+        mic_fission(jdx) = nuc % fission(j)
+        mic_nu_fission(jdx) = nuc % nu_fission(j)
+        mic_absorption(jdx) = nuc % absorption(j)
+!       mic_heating(jdx) = nuc % heating(j)
+      end do
+      
+      do j = 1, n_grid
+        mic_grid_index(j + n_grid*(i-1)) = nuc % grid_index(j)
+      end do
+
+      n_grid_total = n_grid_total + ngrd
+
+    end do
+
+  end subroutine mic_reinit
 
 end module initialize
