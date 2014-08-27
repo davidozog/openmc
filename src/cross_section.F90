@@ -475,11 +475,11 @@ contains
       i_nuclide = mat % nuclide(i)
 
       ! Calculate microscopic cross section for this nuclide
-      if (p % E /= micro_xs(i_nuclide) % last_E) then
-        call calculate_nuclide_xs(i_nuclide, i_sab, p % E)
-      else if (i_sab /= micro_xs(i_nuclide) % last_index_sab) then
-        call calculate_nuclide_xs(i_nuclide, i_sab, p % E)
-      end if
+!!!!      if (p % E /= micro_xs(i_nuclide) % last_E) then
+!!!!        call calculate_nuclide_xs(i_nuclide, i_sab, p % E)
+!!!!      else if (i_sab /= micro_xs(i_nuclide) % last_index_sab) then
+!!!!        call calculate_nuclide_xs(i_nuclide, i_sab, p % E)
+!!!!      end if
 
       ! ========================================================================
       ! ADD TO MACROSCOPIC CROSS SECTION

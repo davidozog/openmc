@@ -914,7 +914,7 @@ contains
 
   subroutine mic_initialize()
     
-    integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
+    integer :: i, j, jdx, ngrd, i_nuclide, n_grid_total
     type(Nuclide), pointer :: nuc => null()
     integer :: ierr 
 
@@ -924,7 +924,7 @@ contains
     mic_n_nuclides_total = n_nuclides_total
     mic_n_grid = n_grid
     mic_work = work
-    allocate(mic_materials(n_materials), STAT=ierr)
+!   allocate(mic_materials(n_materials), STAT=ierr)
     allocate(mic_n_nuclides(n_materials), STAT=ierr)
     allocate(mic_nuc_base_idx(n_nuclides_total), STAT=ierr)
     allocate(mic_nuc_Q_value(n_nuclides_total), STAT=ierr)
@@ -1047,8 +1047,12 @@ contains
 
       n_grid_total = n_grid_total + ngrd
 
+      call nuc % clear()
+
     end do
 
+    deallocate(nuclides)
+    print *, "successfully deallocated nuclides"
 
     do i = 1, n_materials
       if (materials(i) % n_sab > 0) then
@@ -1115,9 +1119,8 @@ contains
   end subroutine mic_initialize
 
   subroutine mic_reinit()
-    integer :: i, j, jdx, ngrd, n_nuclide, i_nuclide, n_grid_total
+    integer :: i, j, jdx, ngrd, i_nuclide, n_grid_total
     type(Nuclide), pointer :: nuc => null()
-    integer :: ierr 
 
     mic_nuc_base_idx(1) = 0
     i_nuclide = 0

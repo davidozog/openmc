@@ -44,8 +44,6 @@ contains
 
     type(Particle) :: p
     integer        :: i_work
-    integer :: alloc_err     ! fission bank allocation error code
-    integer :: alloc_err_xs  ! cross section allocation error code
 
     if (master) call header("K EIGENVALUE SIMULATION", level=1)
 
@@ -194,7 +192,7 @@ print *, "after join_xs"
     ! check CMFD initialize batch
     if (cmfd_run) call cmfd_init_batch()
 
-    call mic_reinit()
+!   call mic_reinit()
 
   end subroutine initialize_batch
 
