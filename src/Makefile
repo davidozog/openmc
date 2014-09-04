@@ -17,6 +17,8 @@ MPI      = no
 OPENMP   = yes
 HDF5     = no
 PETSC    = no
+TAUTIMER = yes
+MIC      = yes
 
 #===============================================================================
 # External Library Paths
@@ -183,10 +185,13 @@ endif
 
 ifeq ($(OPENMP),yes)
   ifeq ($(COMPILER),intel)
-    F90FLAGS += -openmp -mmic
-    LDFLAGS += -openmp -mmic
-    #F90FLAGS += -openmp
-    #LDFLAGS += -openmp
+	  ifeq ($(MIC),yes)
+    	F90FLAGS += -openmp -mmic
+    	LDFLAGS += -openmp -mmic
+	  else
+      F90FLAGS += -openmp
+      LDFLAGS += -openmp
+		endif
   endif
 
   ifeq ($(COMPILER),gnu)
@@ -238,6 +243,15 @@ endif
 ifeq ($(MACHINE),bluegeneq)
   F90 = mpixlf2003
   F90FLAGS = -WF,-DNO_F2008,-DMPI,-DRESTRICTED_ASSOCIATED_BUG -O5
+endif
+
+ifeq ($(TAUTIMER), yes)
+	F90FLAGS += -I/home/dozog/src/tau2/include
+ifeq ($(MIC) , yes)
+	LDFLAGS += -L/home/dozog/src/tau2/mic_linux/lib -ltau-rsbench-icpc-papi-ompt-pdt-openmp -Wl,-rpath,/soft/libraries/papi-icc-k1om-5.3.0/lib -L/soft/libraries/papi-icc-k1om-5.3.0/lib/ -lpapi -L/home/dozog/src/tau2/mic_linux/binutils-2.23.2/lib -L/home/dozog/src/tau2/mic_linux/binutils-2.23.2/lib64 -lbfd -liberty -lrt -L/home/dozog/src/tau2/mic_linux/libunwind-mic-1.1-icc/lib -lunwind -Wl,-rpath=/home/dozog/src/tau2/mic_linux/libunwind-mic-1.1-icc/lib -mmic -ldl -Wl,-rpath=/home/dozog/src/tau2/mic_linux/lib -L/home/dozog/src/tau2/mic_linux/lib -liomp5 -ldl -lm -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7/ -L/usr/bin/../lib -lstdc++ -lgcc_s -L/home/dozog/src/tau2/mic_linux/lib/static-rsbench-icpc-papi-ompt-pdt-openmp
+else
+	LDFLAGS += -L/home/dozog/src/tau2/x86_64/lib -ltau-openmc-icpc-ompt-pdt-openmp -L/home/dozog/src/tau2/x86_64/binutils-2.23.2/lib -L/home/dozog/src/tau2/x86_64/binutils-2.23.2/lib64 -lbfd -liberty -lz -Wl,--export-dynamic -lrt -L/home/dozog/src/tau2/x86_64/libunwind-1.1-icc/lib -lunwind -Wl,-rpath=/home/dozog/src/tau2/x86_64/libunwind-1.1-icc/lib -ldl -Wl,-rpath=/home/dozog/src/tau2/x86_64/lib -L/home/dozog/src/tau2/x86_64/lib -liomp5 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7/ -L/usr/bin/../lib64 -lstdc++ -lgcc_s -L/home/dozog/src/tau2/x86_64/lib/static-openmc-icpc-ompt-pdt-openmp
+endif
 endif
 
 #===============================================================================

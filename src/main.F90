@@ -11,6 +11,11 @@ program main
 
   implicit none
 
+  integer profiler(2) / 0, 0 /
+  save profiler
+
+  call TAU_PROFILE_INIT()
+
   ! set up problem
   call initialize_run()
 

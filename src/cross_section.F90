@@ -409,6 +409,9 @@ contains
 
   subroutine calculate_xs(p)
 
+      integer profiler(2) / 0, 0 /
+      save profiler
+
     type(Particle), intent(inout) :: p
 
     integer :: i             ! loop index over nuclides
@@ -419,6 +422,9 @@ contains
     logical :: check_sab     ! should we check for S(a,b) table?
     type(Material), pointer, save :: mat => null() ! current material
 !$omp threadprivate(mat)
+
+    call TAU_PROFILE_TIMER(profiler, 'CALCULATE_XS [{cross_section.F90}]')
+    call TAU_PROFILE_START(profiler)
 
     ! Set all material macroscopic cross sections to zero
     material_xs % total      = ZERO
@@ -511,6 +517,8 @@ contains
       material_xs % kappa_fission = material_xs % kappa_fission + &
            atom_density * micro_xs(i_nuclide) % kappa_fission
     end do
+
+  call TAU_PROFILE_STOP(profiler)
 
   end subroutine calculate_xs
 
