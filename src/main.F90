@@ -11,10 +11,11 @@ program main
 
   implicit none
 
+#ifdef TAU_TIMER
   integer profiler(2) / 0, 0 /
   save profiler
-
   call TAU_PROFILE_INIT()
+#endif
 
   ! set up problem
   call initialize_run()

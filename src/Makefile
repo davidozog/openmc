@@ -18,7 +18,7 @@ OPENMP   = yes
 HDF5     = no
 PETSC    = no
 TAUTIMER = yes
-MIC      = yes
+MIC      = no
 
 #===============================================================================
 # External Library Paths
@@ -189,7 +189,7 @@ ifeq ($(OPENMP),yes)
     	F90FLAGS += -openmp -mmic
     	LDFLAGS += -openmp -mmic
 	  else
-      F90FLAGS += -openmp
+      F90FLAGS += -openmp -vec-report=3
       LDFLAGS += -openmp
 		endif
   endif
@@ -246,7 +246,7 @@ ifeq ($(MACHINE),bluegeneq)
 endif
 
 ifeq ($(TAUTIMER), yes)
-	F90FLAGS += -I/home/dozog/src/tau2/include
+	F90FLAGS += -I/home/dozog/src/tau2/include -DTAU_TIMER
 ifeq ($(MIC) , yes)
 	LDFLAGS += -L/home/dozog/src/tau2/mic_linux/lib -ltau-rsbench-icpc-papi-ompt-pdt-openmp -Wl,-rpath,/soft/libraries/papi-icc-k1om-5.3.0/lib -L/soft/libraries/papi-icc-k1om-5.3.0/lib/ -lpapi -L/home/dozog/src/tau2/mic_linux/binutils-2.23.2/lib -L/home/dozog/src/tau2/mic_linux/binutils-2.23.2/lib64 -lbfd -liberty -lrt -L/home/dozog/src/tau2/mic_linux/libunwind-mic-1.1-icc/lib -lunwind -Wl,-rpath=/home/dozog/src/tau2/mic_linux/libunwind-mic-1.1-icc/lib -mmic -ldl -Wl,-rpath=/home/dozog/src/tau2/mic_linux/lib -L/home/dozog/src/tau2/mic_linux/lib -liomp5 -ldl -lm -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7/ -L/usr/bin/../lib -lstdc++ -lgcc_s -L/home/dozog/src/tau2/mic_linux/lib/static-rsbench-icpc-papi-ompt-pdt-openmp
 else

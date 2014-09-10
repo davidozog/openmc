@@ -35,6 +35,13 @@ contains
     integer :: i
     type(Particle), intent(inout) :: p
     type(Material), pointer :: mat => null() ! current material
+
+#ifdef TAU_TIMER
+    integer profiler(2) / 0, 0 /
+    save profiler
+    call TAU_PROFILE_TIMER(profiler, 'BANK_XS [{cross_section.F90:32}]')
+    call TAU_PROFILE_START(profiler)
+#endif
     
     current_bank_slot = n_bank_xs + 1
     bp_tp_id(current_bank_slot) = p % id
@@ -78,6 +85,11 @@ contains
 !!!     end if
       call fatal_error()
     end if
+
+#ifdef TAU_TIMER
+  ! Don't include find_energy_index because you'd have to do it anyway
+  call TAU_PROFILE_STOP(profiler)
+#endif
 
   end subroutine bank_xs
 
@@ -150,7 +162,7 @@ contains
 !!dir$ prefetch bp_nuclides, bp_energy_index, bp_E
 
 !NOTE: might need a "simd" pragma here
-!dir$ ivdep
+!dir$ simd
       NUCLIDES_IN_MATERIAL_LOOP: do i = 1, bp_n_nuclides(pp)
         ! ======================================================================
         ! CHECK FOR S(A,B) TABLE
@@ -423,8 +435,10 @@ contains
     type(Material), pointer, save :: mat => null() ! current material
 !$omp threadprivate(mat)
 
-    call TAU_PROFILE_TIMER(profiler, 'CALCULATE_XS [{cross_section.F90}]')
+#ifdef TAU_TIMER
+    call TAU_PROFILE_TIMER(profiler, 'CALCULATE_XS [{cross_section.F90:418}]')
     call TAU_PROFILE_START(profiler)
+#endif
 
     ! Set all material macroscopic cross sections to zero
     material_xs % total      = ZERO
@@ -518,7 +532,9 @@ contains
            atom_density * micro_xs(i_nuclide) % kappa_fission
     end do
 
+#ifdef TAU_TIMER
   call TAU_PROFILE_STOP(profiler)
+#endif
 
   end subroutine calculate_xs
 
@@ -862,6 +878,12 @@ contains
     real(8), intent(in) :: E ! energy of particle
     integer :: e_index ! unionized energy index
 
+      integer profiler(2) / 0, 0 /
+      save profiler
+
+!    call TAU_PROFILE_TIMER(profiler, 'FIND_ENERGY_INDEX [{cross_section.F90:869}]')
+!    call TAU_PROFILE_START(profiler)
+
     ! if particle's energy is outside of energy grid range, set to first or last
     ! index. Otherwise, do a binary search through the union energy grid.
     if (E < e_grid(1)) then
@@ -871,6 +893,8 @@ contains
     else
       e_index = binary_search(e_grid, n_grid, E)
     end if
+
+!   call TAU_PROFILE_STOP(profiler)
 
   end function find_energy_index
 
