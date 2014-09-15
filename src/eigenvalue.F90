@@ -72,7 +72,7 @@ contains
 
         ! ====================================================================
         ! LOOP OVER PARTICLES
-!$omp parallel do schedule(static) firstprivate(p) &
+!$omp parallel do schedule(guided) firstprivate(p) &
 !$omp reduction(+:tally_tracklength) &
 !$omp reduction(+:tally_collision) &
 !$omp reduction(+:tally_leakage) &
@@ -245,14 +245,14 @@ contains
       if (master) call calculate_combined_keff()
 
       ! Create state point file
-      call write_state_point()
+!     call write_state_point()
     end if
 
     ! Write out source point if it's been specified for this batch
-    if ((sourcepoint_batch % contains(current_batch) .or. source_latest) .and. &
-        source_write) then
-      call write_source_point()
-    end if
+!   if ((sourcepoint_batch % contains(current_batch) .or. source_latest) .and. &
+!       source_write) then
+!     call write_source_point()
+!   end if
 
     if (master .and. current_batch == n_batches) then
       ! Make sure combined estimate of k-effective is calculated at the last

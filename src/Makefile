@@ -18,7 +18,7 @@ MPI      = yes
 OPENMP   = yes
 HDF5     = no
 PETSC    = no
-MIC      = no
+MIC      = yes
 #NOTE: keep 'MIC=yes' for development
 
 #===============================================================================
