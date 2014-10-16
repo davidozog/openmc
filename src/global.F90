@@ -169,6 +169,7 @@ module global
   integer(8) :: work         ! number of particles per processor
   integer(8), allocatable :: work_index(:) ! starting index in source bank for each process
   integer(8) :: current_work ! index in source bank of current history simulated
+  double precision :: alpha_global
 
   ! Temporary k-effective values
   real(8), allocatable :: k_generation(:) ! single-generation estimates of k
@@ -233,6 +234,8 @@ module global
   type(Timer) :: time_active        ! timer for active batches
   type(Timer) :: time_transport     ! timer for transport only
   type(Timer) :: time_finalize      ! timer for finalization
+  type(Timer) :: calculation_time   ! timer for runtime determination of alpha
+                                    !       for CPU/MIC load balancing 
 
   ! ===========================================================================
   ! VARIANCE REDUCTION VARIABLES

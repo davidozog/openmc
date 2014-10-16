@@ -1323,6 +1323,9 @@ contains
 !===============================================================================
 
   subroutine print_batch_keff()
+    real(8)       :: speed_inactive  ! # of neutrons/second in inactive batches
+    real(8)       :: speed_active    ! # of neutrons/second in active batches
+    character(15) :: string
 
     ! write out information batch and option independent output
     write(UNIT=OUTPUT_UNIT, FMT='(2X,A9)', ADVANCE='NO') &
@@ -1364,6 +1367,71 @@ contains
 
     ! next line
     write(UNIT=OUTPUT_UNIT, FMT=*)
+
+    if (current_batch .eq. 1) then
+      call time_inactive % stop()
+      print *, "time_inactive:", time_inactive % elapsed
+      speed_inactive = real(n_particles * gen_per_batch) / &
+           time_inactive % elapsed
+      alpha_global = speed_inactive
+      string = to_str(speed_inactive)
+      write(ou,101) "Calculation Rate (inactive)", trim(string)
+      call time_inactive % start()
+!   else
+!     call time_active % stop
+    end if
+!   print *, "current_batch", current_batch
+!    print *, "n_inactive", 4
+!    print *, "n_active", 6
+
+    ! Calculate particle rate in active/inactive batches
+!   if (restart_run) then
+!     if (restart_batch < n_inactive) then
+!       speed_inactive = real(n_particles * (n_inactive - restart_batch) * &
+!            gen_per_batch) / time_inactive % elapsed
+!       speed_active = real(n_particles * n_active * gen_per_batch) / &
+!          time_active % elapsed
+!     else
+!       speed_inactive = ZERO
+!       speed_active = real(n_particles * (n_batches - restart_batch) * &
+!            gen_per_batch) / time_active % elapsed
+!     end if
+!   else
+!     if (n_inactive > 0) then
+!       if (time_inactive % elapsed .gt. 0.0001) then
+!         print *, "time_inactive:", time_inactive % elapsed
+!         speed_inactive = real(n_particles * gen_per_batch) / &
+!              time_inactive % elapsed
+!         alpha_global = speed_inactive
+!       end if
+!     end if
+!       if (time_active % elapsed .gt. 0.0001) then
+!         print *, "time_active:", time_active % elapsed
+!         speed_active = real(n_particles * gen_per_batch) / &
+!            time_active % elapsed
+!       end if
+!   end if
+
+    ! display calculation rate
+!   if (.not. (restart_run .and. (restart_batch >= n_inactive)) &
+!        .and. n_inactive > 0) then
+!     string = to_str(speed_inactive)
+!     write(ou,101) "Calculation Rate (inactive)", trim(string)
+!   end if
+!   string = to_str(speed_active)
+!   write(ou,101) "Calculation Rate (active)", trim(string)
+
+    ! format for write statements
+100 format (1X,A,T36,"= ",ES11.4," seconds")
+101 format (1X,A,T36,"=  ",A," neutrons/second")
+
+!   if (current_batch .lt. n_inactive) then
+!     call time_inactive % reset()
+!     call time_inactive % start()
+!   else
+!     call time_active % reset()
+!     call time_active % start()
+!   end if
 
   end subroutine print_batch_keff
 

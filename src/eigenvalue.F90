@@ -48,11 +48,13 @@ contains
 
     ! Turn on inactive timer
     call time_inactive % start()
+    call calculation_time % start
 
     ! ==========================================================================
     ! LOOP OVER BATCHES
     BATCH_LOOP: do current_batch = 1, n_batches
 
+      print *, "initializing batch", rank
       call initialize_batch()
 
       ! Handle restart runs
@@ -65,6 +67,7 @@ contains
       ! LOOP OVER GENERATIONS
       GENERATION_LOOP: do current_gen = 1, gen_per_batch
 
+        print *, "initializing generation", rank
         call initialize_generation()
 
         ! Start timer for transport
@@ -79,7 +82,6 @@ contains
 !$omp reduction(+:tally_absorption)
         PARTICLE_LOOP: do i_work = 1, work
 
-
           current_work = i_work
 
           ! grab source particle from bank
@@ -91,6 +93,13 @@ contains
         end do PARTICLE_LOOP
 !$omp end parallel do
 
+      print *, "out of particle loop", rank
+
+      if (current_batch.eq.1) then
+        call calculation_time % stop
+        go to 10
+      end if
+
         ! Accumulate time for transport
         call time_transport % stop()
 
@@ -99,6 +108,8 @@ contains
       end do GENERATION_LOOP
 
       call finalize_batch()
+
+10    print *, "out of finalize batch", rank
 
     end do BATCH_LOOP
 
@@ -143,6 +154,8 @@ contains
 
     ! check CMFD initialize batch
     if (cmfd_run) call cmfd_init_batch()
+
+    if (current_batch.eq.2) call calculate_mic_work()
 
   end subroutine initialize_batch
 
@@ -893,5 +906,95 @@ contains
 
   end subroutine join_bank_from_threads
 #endif
+
+!===============================================================================
+! CALCULATE_MIC_WORK determines how many particles for MIC/MPI symmetric execution
+!===============================================================================
+
+  subroutine calculate_mic_work()
+
+    integer    :: i         ! loop index
+    integer    :: remainder ! Number of processors with one extra particle
+    integer(8) :: i_bank    ! Running count of number of particles
+    integer(8) :: min_work  ! Minimum number of particles on each proc
+    integer(8) :: work_i    ! Number of particles on rank i
+    double precision :: alpha
+
+    print *, "ALPHA GLOBAL:", alpha_global
+
+    if (n_procs.eq.3) then
+!     2 MICS:
+      alpha = 0.77
+    else
+!     1 MIC:
+      alpha = 0.625
+    endif
+
+
+!   allocate(work_index(0:n_procs))
+
+#ifdef __MIC__
+    print *, "yes.. on MIC!"
+    print *, "MIC TIMER:", calculation_time % elapsed
+#else
+    print *, "no.. on host."
+    print *, "CPU TIMER:", calculation_time % elapsed
+#endif
+
+#ifdef __MIC__
+       ! Blocks per rank on coprocessor
+       if (n_procs.eq.3) then
+         min_work = int( alpha*n_particles/2, 8 )
+       else
+         min_work = int( alpha*n_particles, 8 )
+       endif
+       print *, "MIC rank:", rank
+       print *, "MIC particles:", min_work
+#else
+       ! Blocks per rank on host
+       min_work = int( (1 - alpha)*n_particles, 8 )
+       print *, "HOST rank:", rank
+       print *, "HOST particles:", min_work
+#endif
+
+    ! Determine minimum amount of particles to simulate on each processor
+!   min_work = n_particles/n_procs
+
+    ! Determine number of processors that have one extra particle
+!   remainder = int(mod(n_particles, int(n_procs,8)), 4)
+
+    i_bank = 0
+    work_index = 0
+
+    work = min_work
+
+    work_index(1) = int( (1 - alpha)*n_particles, 8 )
+    if (n_procs.eq.3) then
+      work_index(2) = work_index(1) + int( alpha*n_particles/2, 8 )
+      work_index(3) = work_index(2) + int( alpha*n_particles/2, 8 )
+    else
+      work_index(2) = work_index(1) + int( alpha*n_particles, 8 )
+    endif
+
+!    do i = 0, n_procs - 1
+!      ! Number of particles for rank i
+!!     if (i < remainder) then
+!!       work_i = min_work + 1
+!!     else
+!!       work_i = min_work
+!!     end if
+!
+!      work_i = min_work
+!
+!      ! Set number of particles
+!      if (rank == i) work = work_i
+!
+!      ! Set index into source bank for rank i
+!      i_bank = i_bank + work_i
+!      work_index(i+1) = i_bank
+!    end do
+
+  end subroutine calculate_mic_work
+
 
 end module eigenvalue
