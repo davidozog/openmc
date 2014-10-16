@@ -134,8 +134,8 @@ contains
       call configure_tallies()
 
       ! Determine how much work each processor should do
-      call calculate_mic_work()
-!     call calculate_work()
+!     call calculate_mic_work()
+      call calculate_work()
 
       ! Allocate banks and create source particles -- for a fixed source
       ! calculation, the external source distribution is sampled during the
@@ -886,16 +886,23 @@ contains
     integer(8) :: i_bank    ! Running count of number of particles
     integer(8) :: min_work  ! Minimum number of particles on each proc
     integer(8) :: work_i    ! Number of particles on rank i
+    integer :: p_host       ! Total number of processes running on hosts
+    integer :: p_mic        ! Total number of processes running on MICS
     double precision :: alpha
 
-    if (n_procs.eq.3) then
-!     2 MICS:
-      alpha = 0.77
-    else
-!     1 MIC:
-      alpha = 0.625
-    endif
+    alpha = 0.47
 
+! NOTE: Only works on Stampede using the 'normal-2mic' queue, 
+!       passing '-2' to ibrun, setting MPI_PPN=1, and passing
+!       the same value to '-N' and '-n'
+
+!   2 MICs per node:
+!   p_host = n_procs / 3 
+!   p_mic = p_host * 2
+
+!   1 MIC per node:
+    p_host = n_procs / 2 
+    p_mic = p_host
 
     allocate(work_index(0:n_procs))
 
@@ -906,57 +913,36 @@ contains
 #endif
 
 #ifdef __MIC__
-       ! Blocks per rank on coprocessor
-       if (n_procs.eq.3) then
-         min_work = int( alpha*n_particles/2, 8 )
-       else
-         min_work = int( alpha*n_particles, 8 )
-       endif
-       print *, "MIC rank:", rank
-       print *, "MIC particles:", min_work
+    ! particles per rank on coprocessor
+    min_work = int( n_particles/(p_mic + alpha*p_host), 8 )
+    print *, "MIC rank:", rank
+    print *, "MIC particles:", min_work
+    work = min_work
 #else
-       ! Blocks per rank on host
-       min_work = int( (1 - alpha)*n_particles, 8 )
-       print *, "HOST rank:", rank
-       print *, "HOST particles:", min_work
+    ! particles per rank on host
+    min_work = int( (alpha*n_particles)/(p_mic + alpha*p_host), 8 )
+    print *, "HOST rank:", rank
+    print *, "HOST particles:", min_work
+    work = min_work
 #endif
 
-    ! Determine minimum amount of particles to simulate on each processor
-!   min_work = n_particles/n_procs
-
-    ! Determine number of processors that have one extra particle
-!   remainder = int(mod(n_particles, int(n_procs,8)), 4)
-
     i_bank = 0
-    work_index = 0
+    work_index(0) = 0
 
-    work = min_work
+    do i = 0, n_procs-1
+!     2 MICs per node:
+!     if ( mod(i, 3) == 0 ) then
 
-    work_index(1) = int( (1 - alpha)*n_particles, 8 )
-    if (n_procs.eq.3) then
-      work_index(2) = work_index(1) + int( alpha*n_particles/2, 8 )
-      work_index(3) = work_index(2) + int( alpha*n_particles/2, 8 )
-    else
-      work_index(2) = work_index(1) + int( alpha*n_particles, 8 )
-    endif
+!     1 MICs per node:
+      if ( mod(i, 2) == 0 ) then
+        i_bank = i_bank + int( (alpha*n_particles)/(p_mic + alpha*p_host), 8 )
+      else
+        i_bank = i_bank + int( n_particles/(p_mic + alpha*p_host), 8 )
+      endif
+      work_index(i+1) = i_bank
+    end do
 
-!    do i = 0, n_procs - 1
-!      ! Number of particles for rank i
-!!     if (i < remainder) then
-!!       work_i = min_work + 1
-!!     else
-!!       work_i = min_work
-!!     end if
-!
-!      work_i = min_work
-!
-!      ! Set number of particles
-!      if (rank == i) work = work_i
-!
-!      ! Set index into source bank for rank i
-!      i_bank = i_bank + work_i
-!      work_index(i+1) = i_bank
-!    end do
+    if (rank == 0) print *, "WORK_IDX:", work_index
 
   end subroutine calculate_mic_work
 
@@ -970,7 +956,8 @@ contains
 
     ! Allocate source bank
     ! Dave: Allocate 2 times as usual since we are using guided load balancing
-    allocate(source_bank(2*work), STAT=alloc_err)
+    allocate(source_bank( int(2.5*work,4) ), STAT=alloc_err)
+!   allocate(source_bank( work ), STAT=alloc_err)
 
     ! Check for allocation errors 
     if (alloc_err /= 0) then
